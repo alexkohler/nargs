@@ -40,6 +40,9 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
 	}
 
 	for _, f := range files {
+		if f == nil {
+			continue
+		}
 		ast.Walk(retVis, f)
 	}
 
