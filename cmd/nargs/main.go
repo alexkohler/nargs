@@ -20,7 +20,19 @@ func main() {
 	// Remove log timestamp
 	log.SetFlags(0)
 
-	if err := nargs.CheckForUnusedFunctionArgs(flag.Args()); err != nil {
+	includeTests := flag.Bool("tests", true, "include test (*_test.go) files")
+	setExitStatus := flag.Bool("set_exit_status", true, "Set exit status to 1 if any issues are found")
+
+	flag.Parse()
+
+	flags := nargs.Flags{
+		IncludeTests:  *includeTests,
+		SetExitStatus: *setExitStatus,
+	}
+
+	flag.Usage = usage
+
+	if err := nargs.CheckForUnusedFunctionArgs(flag.Args(), flags); err != nil {
 		log.Println(err)
 	}
 }
