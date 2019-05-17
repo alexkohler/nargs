@@ -120,6 +120,10 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
 						funcDecl.Body.List = handleExprs(paramMap, specType.Values, funcDecl.Body.List)
 
+					case *ast.TypeSpec:
+						handleIdent(paramMap, specType.Name)
+						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
+
 					default:
 						log.Printf("ERROR: unknown spec type %T\n", specType)
 					}
