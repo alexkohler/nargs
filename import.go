@@ -1,15 +1,5 @@
 package nargs
 
-/*
-
-This file holds a direct copy of the import path matching code of
-https://github.com/golang/go/blob/master/src/cmd/go/main.go. It can be
-replaced when https://golang.org/issue/8768 is resolved.
-
-It has been updated to follow upstream changes in a few ways.
-
-*/
-
 import (
 	"fmt"
 	"go/ast"
@@ -35,6 +25,103 @@ var (
 	goroot    = filepath.Clean(runtime.GOROOT())
 	gorootSrc = filepath.Join(goroot, "src")
 )
+
+func parseInput(args []string, fset *token.FileSet, includeTests bool) ([]*ast.File, error) {
+	var directoryList []string
+	var fileMode bool
+	files := make([]*ast.File, 0)
+
+	if len(args) == 0 {
+		directoryList = append(directoryList, pwd)
+	} else {
+		for _, arg := range args {
+			if strings.HasSuffix(arg, "/...") && isDir(arg[:len(arg)-len("/...")]) {
+
+				directoryList = append(directoryList, allPackagesInFS(arg)...)
+
+			} else if isDir(arg) {
+				directoryList = append(directoryList, arg)
+
+			} else if exists(arg) {
+				if strings.HasSuffix(arg, ".go") {
+					fileMode = true
+					f, err := parser.ParseFile(fset, arg, nil, 0)
+					if err != nil {
+						return nil, err
+					}
+					files = append(files, f)
+				} else {
+					return nil, fmt.Errorf("invalid file %v specified", arg)
+				}
+			} else {
+
+				imPaths := importPaths([]string{arg})
+				for _, importPath := range imPaths {
+					pkg, err := build.Import(importPath, ".", 0)
+					if err != nil {
+						return nil, err
+					}
+					var stringFiles []string
+					stringFiles = append(stringFiles, pkg.GoFiles...)
+					stringFiles = append(stringFiles, pkg.TestGoFiles...)
+					if pkg.Dir != "." {
+						for i, f := range stringFiles {
+							stringFiles[i] = filepath.Join(pkg.Dir, f)
+						}
+					}
+
+					fileMode = true
+					for _, stringFile := range stringFiles {
+						f, err := parser.ParseFile(fset, stringFile, nil, 0)
+						if err != nil {
+							return nil, err
+						}
+						files = append(files, f)
+					}
+
+				}
+			}
+		}
+	}
+
+	// if we're not in file mode, then we need to grab each and every package in each directory
+	// we can to grab all the files
+	if !fileMode {
+		for _, fpath := range directoryList {
+			pkgs, err := parser.ParseDir(fset, fpath, nil, 0)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, pkg := range pkgs {
+				for _, f := range pkg.Files {
+					files = append(files, f)
+				}
+			}
+		}
+	}
+
+	// do a final pass to remove tests
+	if !includeTests {
+		for i, f := range files {
+			if strings.HasSuffix(fset.File(f.Pos()).Name(), "test.go") {
+				files[i] = nil
+			}
+		}
+	}
+
+	return files, nil
+}
+
+func isDir(filename string) bool {
+	fi, err := os.Stat(filename)
+	return err == nil && fi.IsDir()
+}
+
+func exists(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil
+}
 
 // importPathsNoDotExpansion returns the import paths to use for the given
 // command line, but it does no ... expansion.
@@ -85,98 +172,6 @@ func importPaths(args []string) []string {
 		out = append(out, a)
 	}
 	return out
-}
-
-func parseInput(args []string, fset *token.FileSet) ([]*ast.File, error) {
-	var directoryList []string
-	var fileMode bool
-	files := make([]*ast.File, 0)
-
-	if len(args) == 0 {
-		directoryList = append(directoryList, pwd)
-	} else {
-		for _, arg := range args {
-			if strings.HasSuffix(arg, "/...") && isDir(arg[:len(arg)-len("/...")]) {
-
-				for _, dirname := range allPackagesInFS(arg) {
-					directoryList = append(directoryList, dirname)
-				}
-
-			} else if isDir(arg) {
-				directoryList = append(directoryList, arg)
-
-			} else if exists(arg) {
-				if strings.HasSuffix(arg, ".go") {
-					fileMode = true
-					f, err := parser.ParseFile(fset, arg, nil, 0)
-					if err != nil {
-						return nil, err
-					}
-					files = append(files, f)
-				} else {
-					return nil, fmt.Errorf("invalid file %v specified", arg)
-				}
-			} else {
-
-				//TODO clean this up a bit
-				imPaths := importPaths([]string{arg})
-				for _, importPath := range imPaths {
-					pkg, err := build.Import(importPath, ".", 0)
-					if err != nil {
-						return nil, err
-					}
-					var stringFiles []string
-					stringFiles = append(stringFiles, pkg.GoFiles...)
-					// files = append(files, pkg.CgoFiles...)
-					stringFiles = append(stringFiles, pkg.TestGoFiles...)
-					if pkg.Dir != "." {
-						for i, f := range stringFiles {
-							stringFiles[i] = filepath.Join(pkg.Dir, f)
-						}
-					}
-
-					fileMode = true
-					for _, stringFile := range stringFiles {
-						f, err := parser.ParseFile(fset, stringFile, nil, 0)
-						if err != nil {
-							return nil, err
-						}
-						files = append(files, f)
-					}
-
-				}
-			}
-		}
-	}
-
-	// if we're not in file mode, then we need to grab each and every package in each directory
-	// we can to grab all the files
-	if !fileMode {
-		for _, fpath := range directoryList {
-			pkgs, err := parser.ParseDir(fset, fpath, nil, 0)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, pkg := range pkgs {
-				for _, f := range pkg.Files {
-					files = append(files, f)
-				}
-			}
-		}
-	}
-
-	return files, nil
-}
-
-func isDir(filename string) bool {
-	fi, err := os.Stat(filename)
-	return err == nil && fi.IsDir()
-}
-
-func exists(filename string) bool {
-	_, err := os.Stat(filename)
-	return err == nil
 }
 
 // matchPattern(pattern)(name) reports whether
@@ -257,7 +252,7 @@ func matchPackages(pattern string) []string {
 
 	// Commands
 	cmd := filepath.Join(goroot, "src/cmd") + string(filepath.Separator)
-	filepath.Walk(cmd, func(path string, fi os.FileInfo, err error) error {
+	_ = filepath.Walk(cmd, func(path string, fi os.FileInfo, err error) error {
 		if err != nil || !fi.IsDir() || path == cmd {
 			return nil
 		}
@@ -299,7 +294,7 @@ func matchPackages(pattern string) []string {
 		if pattern == "cmd" {
 			root += "cmd" + string(filepath.Separator)
 		}
-		filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
+		_ = filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 			if err != nil || !fi.IsDir() || path == src {
 				return nil
 			}
@@ -369,7 +364,7 @@ func matchPackagesInFS(pattern string) []string {
 	match := matchPattern(pattern)
 
 	var pkgs []string
-	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+	_ = filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
 		if err != nil || !fi.IsDir() {
 			return nil
 		}
