@@ -1,89 +1,57 @@
-# nakedret
+# nargs
 
-nakedret is a Go static analysis tool to find naked returns in functions greater than a specified function length.
+nargs is a Go static analysis tool to find unused arguments in function declarations.
 
 ## Installation
 
-    go get -u github.com/alexkohler/nakedret
+    go get -u github.com/alexkohler/nargs/cmd/nargs	
 
 ## Usage
 
 Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret can be invoked with one or more filenames, directories, or packages named by its import path. Nakedret also supports the `...` wildcard. 
 
-    nakedret [flags] files/directories/packages
-
-Currently, the only flag supported is -l, which is an optional numeric flag to specify the maximum length a function can be (in terms of line length). If not specified, it defaults to 5.
+    nargs files/directories/packages
 
 ## Purpose
 
-As noted in Go's [Code Review comments](https://github.com/golang/go/wiki/CodeReviewComments#named-result-parameters):
-
-> Naked returns are okay if the function is a handful of lines. Once it's a medium sized function, be explicit with your return 
-> values. Corollary: it's not worth it to name result parameters just because it enables you to use naked returns. Clarity of docs is always more important than saving a line or two in your function.
-
-This tool aims to catch naked returns on non-trivial functions.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to find these types of functions.
 
 ## Example
 
-Let's take the `types` package in the Go source as an example:
-
-```Bash
-$ nakedret -l 25 types/
-types/check.go:245 checkFiles naked returns on 26 line function 
-types/typexpr.go:443 collectParams naked returns on 53 line function 
-types/stmt.go:275 caseTypes naked returns on 27 line function 
-types/lookup.go:275 MissingMethod naked returns on 39 line function
-```
-
-Below is one of the not so intuitive uses of naked returns in `types/lookup.go` found by nakedret (nakedret will return the line number of the last naked return in the function):
-
-
+Some simple examples
 ```Go
-func MissingMethod(V Type, T *Interface, static bool) (method *Func, wrongType bool) {
-	// fast path for common case
-	if T.Empty() {
-		return
-	}
+// main.go
+package main
 
-	// TODO(gri) Consider using method sets here. Might be more efficient.
+// Unused function parameter on function
+func addAB(a int, b int, c int)  int {
+	return a + b
+}
 
-	if ityp, _ := V.Underlying().(*Interface); ityp != nil {
-		// TODO(gri) allMethods is sorted - can do this more efficiently
-		for _, m := range T.allMethods {
-			_, obj := lookupMethod(ityp.allMethods, m.pkg, m.name)
-			switch {
-			case obj == nil:
-				if static {
-					return m, false
-				}
-			case !Identical(obj.Type(), m.typ):
-				return m, true
-			}
-		}
-		return
-	}
+// Unused function parameter on method with receiver
+type f struct{}
+func (f) addAB(a int, b int, c int)  int {
+	return a + b
+}
 
-	// A concrete type implements T if it implements all methods of T.
-	for _, m := range T.allMethods {
-		obj, _, _ := lookupFieldOrMethod(V, false, m.pkg, m.name)
-
-		f, _ := obj.(*Func)
-		if f == nil {
-			return m, false
-		}
-
-		if !Identical(f.typ, m.typ) {
-			return m, true
-		}
-	}
-
-	return
+// Unused function receiver
+func (recv f) addAB(a int, b int, c int)  int {
+	return a + b
 }
 ```
 
-## TODO
+```Bash
 
-- Figure out differences between SSA vs AST approach
+
+```
+
+## FAQ
+
+### How is this different than [unparam](https://github.com/mvdan/unparam)?
+
+`unparam` errs on the safe side to minimize false positives (ignoring functions that satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. unparam operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas nargs uses a purely AST-based approach.
+
+
 
 
 ## Contributing
