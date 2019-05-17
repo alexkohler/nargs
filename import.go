@@ -25,6 +25,10 @@ import (
 	"strings"
 )
 
+const (
+	pwd = "./"
+)
+
 var buildContext = build.Default
 
 var (

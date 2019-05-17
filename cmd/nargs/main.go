@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"math/rand"
 	"os"
 
 	"github.com/alexkohler/nargs"
@@ -21,12 +20,7 @@ func main() {
 	// Remove log timestamp
 	log.SetFlags(0)
 
-	maxLength := flag.Uint("l", 5, "maximum number of lines for a naked return function")
-	flag.Usage = usage
-	flag.Parse()
-	i := rand.Int()
-
-	if err := nargs.CheckForUnusedFunctionArgs(flag.Args(), maxLength, i); err != nil {
+	if err := nargs.CheckForUnusedFunctionArgs(flag.Args()); err != nil {
 		log.Println(err)
 	}
 }

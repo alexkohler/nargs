@@ -1,7 +1,6 @@
 package nargs
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -9,21 +8,15 @@ import (
 	"log"
 )
 
-const (
-	pwd = "./"
-)
-
 func init() {
-	//TODO allow build tags
 	build.Default.UseAllFiles = true
 }
 
-type returnsVisitor struct {
-	f         *token.FileSet
-	maxLength uint
+type unusedVisitor struct {
+	f *token.FileSet
 }
 
-func CheckForUnusedFunctionArgs(args []string, maxLength *uint, unused int) error {
+func CheckForUnusedFunctionArgs(args []string) error {
 
 	fset := token.NewFileSet()
 
@@ -32,13 +25,8 @@ func CheckForUnusedFunctionArgs(args []string, maxLength *uint, unused int) erro
 		return fmt.Errorf("could not parse input %v", err)
 	}
 
-	if maxLength == nil {
-		return errors.New("max length nil")
-	}
-
-	retVis := &returnsVisitor{
-		f:         fset,
-		maxLength: *maxLength,
+	retVis := &unusedVisitor{
+		f: fset,
 	}
 
 	for _, f := range files {
@@ -48,28 +36,7 @@ func CheckForUnusedFunctionArgs(args []string, maxLength *uint, unused int) erro
 	return nil
 }
 
-// Other ideas - see if you can see where returns are being ignored i.e. client.Close() should be _ = client.Close()
-// AssignStmt - LHS is empty?
-
-//TODO - could also look for methods with receivers that don't actually use the receiver? eh
-
-func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
-
-	// os.Stat("hihiihihihi")
-
-	// // search for call expressions
-	// assignStmt, ok := node.(*ast.AssignStmt)
-	// if !ok {
-	// 	return v
-	// }
-
-	// file := v.f.File(assignStmt.Pos())
-	// // fmt.Printf("%v:%v got one %T\n", file.Name(), file.Position(assignStmt.Pos()).Line, assignStmt.Fun)
-
-	// fmt.Printf("%v:%v got one\n", file.Name(), file.Position(assignStmt.Pos()).Line)
-	// fmt.Printf("I have a LHS assignment with size %+v\n", len(assignStmt.Lhs))
-
-	// Next up is to check if there are any receivers
+func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// search for call expressions
 	funcDecl, ok := node.(*ast.FuncDecl)
@@ -80,6 +47,18 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 	paramMap := make(map[string]bool)
 
 	if funcDecl.Type != nil && funcDecl.Type.Params != nil {
+
+		if funcDecl.Recv != nil {
+			for _, field := range funcDecl.Recv.List {
+				for _, name := range field.Names {
+					if name.Name == "_" {
+						continue
+					}
+					paramMap[name.Name] = false
+				}
+			}
+		}
+
 		for _, paramList := range funcDecl.Type.Params.List {
 			for _, name := range paramList.Names {
 				if name.Name == "_" {
@@ -90,7 +69,6 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 	}
 
-	// fmt.Printf("%v::: %v\n", funcDecl.Name.Name, paramMap)
 	if len(paramMap) == 0 || funcDecl.Body == nil {
 		return v
 	}
@@ -99,56 +77,53 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// Analyze body of function
 	for len(funcDecl.Body.List) != 0 {
-		// log.Printf("--------------%v %T\n", stmt.
 		stmt := funcDecl.Body.List[0]
 
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
-			// Either variable is in condition or body
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Init, s.Else)
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
+			funcDecl.Body.List = append(funcDecl.Body.List, s.Init, s.Body, s.Else)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
 
 		case *ast.AssignStmt:
-			//TODO left and right sides?
-			funcDecl.Body.List = processExpr(paramMap, s.Lhs, funcDecl.Body.List)
-			funcDecl.Body.List = processExpr(paramMap, s.Rhs, funcDecl.Body.List)
+			//TODO check both left and right sides?
+			funcDecl.Body.List = handleExprs(paramMap, s.Lhs, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, s.Rhs, funcDecl.Body.List)
 
 		case *ast.BlockStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.List...)
 
 		case *ast.ReturnStmt:
-			funcDecl.Body.List = processExpr(paramMap, s.Results, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, s.Results, funcDecl.Body.List)
 
 		case *ast.DeclStmt:
 			switch d := s.Decl.(type) {
 			case *ast.GenDecl:
 				for _, spec := range d.Specs {
-					//TODO - i think we only care about valuespec here
-
 					switch specType := spec.(type) {
 					case *ast.ValueSpec:
 						handleIdents(paramMap, specType.Names)
-						funcDecl.Body.List = processExpr(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
-						funcDecl.Body.List = processExpr(paramMap, specType.Values, funcDecl.Body.List)
+						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
+						funcDecl.Body.List = handleExprs(paramMap, specType.Values, funcDecl.Body.List)
 
+					default:
+						log.Printf("ERROR: unknown spec type %T\n", specType)
 					}
-
 				}
 
 			default:
-				fmt.Printf("## decl type not handled %T\n", d)
+				log.Printf("ERROR: unknown decl type %T\n", d)
 			}
 
 		case *ast.ExprStmt:
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case *ast.RangeStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case *ast.ForStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
 
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Post)
 
@@ -156,18 +131,18 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Assign, s.Init)
 
 		case *ast.CaseClause:
-			funcDecl.Body.List = processExpr(paramMap, s.List, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, s.List, funcDecl.Body.List)
 
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body...)
 
 		case *ast.SendStmt:
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Chan, s.Value}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Chan, s.Value}, funcDecl.Body.List)
 
 		case *ast.GoStmt:
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
 
 		case *ast.DeferStmt:
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
 
 		case *ast.SelectStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
@@ -181,7 +156,7 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 
 		case *ast.SwitchStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Init)
-			funcDecl.Body.List = processExpr(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
 
 		case *ast.LabeledStmt:
 			// this one is kinda weird
@@ -193,7 +168,7 @@ func (v *returnsVisitor) Visit(node ast.Node) ast.Visitor {
 
 		default:
 			// nils will happen here without nil checks on my appends, meh
-			fmt.Printf("~~~~ missing type %T\n", s)
+			log.Printf("ERROR: unknown stmt type %T\n", s)
 
 		}
 
@@ -224,12 +199,17 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 	if ident == nil {
 		return
 	}
+
+	if ident.Obj != nil && ident.Obj.Kind == ast.Var {
+		paramMap[ident.Obj.Name] = true
+	}
+
 	if _, ok := paramMap[ident.Name]; ok {
 		paramMap[ident.Name] = true
 	}
 }
 
-func processExpr(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
+func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
 	for len(exprList) != 0 {
 		expr := exprList[0]
 		switch e := expr.(type) {
