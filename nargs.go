@@ -6,6 +6,7 @@ import (
 	"go/build"
 	"go/token"
 	"log"
+	"os"
 )
 
 func init() {
@@ -21,7 +22,8 @@ type Flags struct {
 }
 
 type unusedVisitor struct {
-	f *token.FileSet
+	f         *token.FileSet
+	errsFound bool
 }
 
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
@@ -39,6 +41,10 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
 
 	for _, f := range files {
 		ast.Walk(retVis, f)
+	}
+
+	if retVis.errsFound && flags.SetExitStatus {
+		os.Exit(1)
 	}
 
 	return nil
@@ -203,6 +209,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 				if funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
 					log.Printf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName)
+					v.errsFound = true
 				}
 			}
 		}
