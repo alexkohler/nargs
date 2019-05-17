@@ -8,7 +8,7 @@ nargs is a Go static analysis tool to find unused arguments in function declarat
 
 ## Usage
 
-Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret can be invoked with one or more filenames, directories, or packages named by its import path. nargs also supports the `...` wildcard. 
+Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be invoked with one or more filenames, directories, or packages named by its import path. nargs also supports the `...` wildcard. 
 
     nargs [flags] files/directories/packages
 	
@@ -18,14 +18,13 @@ Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret ca
 
 ## Purpose
 
-Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to find these types of functions.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is not used.
 
 ## Examples
 
 ```Go
 // test.go
 package main
-
 
 // Unused function parameter on function
 func funcOne(a int, b int, c int) int {
@@ -63,7 +62,7 @@ test.go:22 funcFour contains unused parameter namedReturn
 
 ### How is this different than [unparam](https://github.com/mvdan/unparam)?
 
-`unparam` errs on the safe side to minimize false positives (ignoring functions that satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. unparam operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas nargs uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne.
+`unparam` errs on the safe side to minimize false positives (ignoring functions that satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne.
 
 ```Bash
 $ unparam test.go 
@@ -95,14 +94,9 @@ func (f) funcThree(_ int) int {
 func funcFour() (namedReturn int) {
 ```
 
-
-
-
-
-
 ## Other static analysis tools
 
-If you've enjoyed nakedret, take a look at my other static anaylsis tools!
+If you've enjoyed nargs, take a look at my other static anaylsis tools!
 
 - [prealloc](https://github.com/alexkohler/prealloc) - Finds slice declarations that could potentially be preallocated.
 - [nakedret](https://github.com/alexkohler/nakedret) - Finds naked returns.

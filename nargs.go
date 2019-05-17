@@ -115,7 +115,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
 
 		case *ast.AssignStmt:
-			//TODO check both left and right sides?
+			//TODO see if variables on LHS are used? i.e. add them to param map?
 			funcDecl.Body.List = handleExprs(paramMap, s.Lhs, funcDecl.Body.List)
 			funcDecl.Body.List = handleExprs(paramMap, s.Rhs, funcDecl.Body.List)
 
@@ -298,17 +298,17 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			exprList = append(exprList, e.Value)
 
 		case *ast.FuncType:
-			exprList, stmtList = processFieldList(paramMap, e.Params, exprList, stmtList)
-			exprList, stmtList = processFieldList(paramMap, e.Results, exprList, stmtList)
+			exprList, stmtList = handleFieldList(paramMap, e.Params, exprList, stmtList)
+			exprList, stmtList = handleFieldList(paramMap, e.Results, exprList, stmtList)
 
 		case *ast.InterfaceType:
-			exprList, stmtList = processFieldList(paramMap, e.Methods, exprList, stmtList)
+			exprList, stmtList = handleFieldList(paramMap, e.Methods, exprList, stmtList)
 
 		case *ast.MapType:
 			exprList = append(exprList, e.Key, e.Value)
 
 		case *ast.StructType:
-			exprList, stmtList = processFieldList(paramMap, e.Fields, exprList, stmtList)
+			exprList, stmtList = handleFieldList(paramMap, e.Fields, exprList, stmtList)
 
 		case *ast.Ellipsis:
 			exprList = append(exprList, e.Elt)
@@ -325,7 +325,7 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 	return stmtList
 }
 
-func processFieldList(paramMap map[string]bool, fieldList *ast.FieldList, exprList []ast.Expr, stmtList []ast.Stmt) ([]ast.Expr, []ast.Stmt) {
+func handleFieldList(paramMap map[string]bool, fieldList *ast.FieldList, exprList []ast.Expr, stmtList []ast.Stmt) ([]ast.Expr, []ast.Stmt) {
 	if fieldList == nil {
 		return exprList, stmtList
 	}
