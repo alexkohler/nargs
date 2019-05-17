@@ -22,12 +22,14 @@ func main() {
 
 	includeTests := flag.Bool("tests", true, "include test (*_test.go) files")
 	setExitStatus := flag.Bool("set_exit_status", true, "Set exit status to 1 if any issues are found")
+	includeNamedReturns := flag.Bool("named_returns", false, "Report unused named return arguments")
 
 	flag.Parse()
 
 	flags := nargs.Flags{
-		IncludeTests:  *includeTests,
-		SetExitStatus: *setExitStatus,
+		IncludeTests:        *includeTests,
+		SetExitStatus:       *setExitStatus,
+		IncludeNamedReturns: *includeNamedReturns,
 	}
 
 	flag.Usage = usage

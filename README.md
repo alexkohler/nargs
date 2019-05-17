@@ -15,6 +15,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 ### Flags
 - **-tests** (default true) - Include test files in analysis
 - **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
+- **-named_returns** (default false) - Report unused named return arguments. This is false by default because named returns can be used to provide context to what's being returned.
 
 ## Purpose
 
@@ -43,7 +44,8 @@ func (recv f) funcThree(z int) int {
         return 5
 }
 
-// Unused named returns
+// Unused named returns (if the -named_returns is set to true, 
+// these will be flagged. They are not flagged by default.)
 func funcFour() (namedReturn int) {
 	return
 }
