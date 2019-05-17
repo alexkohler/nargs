@@ -184,7 +184,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
 
 		case *ast.LabeledStmt:
-			// this one is kinda weird
 			handleIdent(paramMap, s.Label)
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Stmt)
 
@@ -192,7 +191,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			//no-op
 
 		default:
-			// nils will happen here without nil checks on my appends, meh
 			log.Printf("ERROR: unknown stmt type %T\n", s)
 		}
 
@@ -325,8 +323,6 @@ func processFieldList(paramMap map[string]bool, fieldList *ast.FieldList, exprLi
 	for _, field := range fieldList.List {
 		exprList = append(exprList, field.Type)
 		handleIdents(paramMap, field.Names)
-
-		// don't care about Tag, need to handle ident and expr
 	}
 	return exprList, stmtList
 }
