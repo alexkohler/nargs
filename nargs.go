@@ -215,6 +215,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			if file != nil {
 				if funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
+					//TODO differentiation of used parameter vs. receiver?
 					log.Printf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName)
 					v.errsFound = true
 				}
