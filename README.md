@@ -4,13 +4,17 @@ nargs is a Go static analysis tool to find unused arguments in function declarat
 
 ## Installation
 
-    go get -u github.com/alexkohler/nargs/cmd/nargs	
+    go get -u github.com/alexkohler/nargs/cmd/nargs
 
 ## Usage
 
-Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret can be invoked with one or more filenames, directories, or packages named by its import path. Nakedret also supports the `...` wildcard. 
+Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret can be invoked with one or more filenames, directories, or packages named by its import path. nargs also supports the `...` wildcard. 
 
-    nargs files/directories/packages
+    nargs [flags] files/directories/packages
+	
+### Flags
+	- **-tests** (default true) - Include test files in analysis
+	- **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
 
 ## Purpose
 
@@ -20,7 +24,7 @@ Often, parameters will be added to functions (such as a constructor), and then n
 
 Some simple examples
 ```Go
-// main.go
+// test.go
 package main
 
 
@@ -41,55 +45,70 @@ func (recv f) funcThree(z int) int {
         return 5
 }
 
-//TODO - nargs isn't picking this up
-func nakedret() (l int) {
-
-
+// Unused named returns
+func funcFour() (namedReturn int) {
 	return
 }
-
 ```
 
 ```Bash
-./nargs main.go 
-main.go:5 funcOne found unused parameter c
-main.go:12 funcTwo found unused parameter c
-main.go:17 funcThree found unused parameter recv
-main.go:17 funcThree found unused parameter z
+$ nargs main.go 
+test.go:5 funcOne contains unused parameter c
+test.go:12 funcTwo contains unused parameter c
+test.go:17 funcThree contains unused parameter z
+test.go:17 funcThree contains unused parameter recv
+test.go:22 funcFour contains unused parameter namedReturn
 ```
 
 ## FAQ
 
-### How should these issues be fixed?
-
-nargs ignores function variables using the blank identifier `_`, and encourages the use of the blank identifier in the event that the parameter cannot be removed from the function due to implementing an interface or function typedef. If this is the case, the following can be done to fix the above example:
-
-```Go
-// fixed.go
-
-
-```
-
 ### How is this different than [unparam](https://github.com/mvdan/unparam)?
 
-`unparam` errs on the safe side to minimize false positives (ignoring functions that satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. unparam operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas nargs uses a purely AST-based approach. Running unparam 
+`unparam` errs on the safe side to minimize false positives (ignoring functions that satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. unparam operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas nargs uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne.
+
+```Bash
+$ unparam test.go 
+test.go:5:28: c is unused
+```
+
+
+### How should these issues be fixed?
+
+In simple cases, the arguments can simply be removed. nargs ignores function variables using the blank identifier `_`, and encourages the use of the blank identifier in the event that the parameter cannot be removed from the function due to implementing an interface or function typedef. If this is the case, the following can be done to fix the above example:
+
+```Go
+package main
+
+func funcOne(a int, b int, _ int) int {
+        return a + b
+}
+
+type f struct{}
+
+func (f) funcTwo(a int, b int, _ int) int {
+        return a + b
+}
+
+func (f) funcThree(_ int) int {
+        return 5
+}
+
+func funcFour() (namedReturn int) {
+```
 
 
 
 
-##TODO
-- running on multiple files?	
-
-## Contributing
-
-Pull requests welcome!
 
 
 ## Other static analysis tools
 
 If you've enjoyed nakedret, take a look at my other static anaylsis tools!
 
-- [unimport](https://github.com/alexkohler/unimport) - Finds unnecessary import aliases
 - [prealloc](https://github.com/alexkohler/prealloc) - Finds slice declarations that could potentially be preallocated.
+- [nakedret](https://github.com/alexkohler/nakedret) - Finds naked returns.
+- [identypo](https://github.com/alexkohler/identypo) - Finds typos in identifiers (functions, function calls, variables, constants, type declarations, packages, labels) including CamelCased functions, variables, etc. 
+- [unimport](https://github.com/alexkohler/unimport) - Finds unnecessary import aliases
+- [dogsled](https://github.com/alexkohler/dogsled) - Finds assignments/declarations with too many blank identifiers (e.g. x, _, _, _, := f()).
 
 
