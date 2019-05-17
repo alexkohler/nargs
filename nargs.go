@@ -12,17 +12,23 @@ func init() {
 	build.Default.UseAllFiles = true
 }
 
+// Flags contains configuration specific to nargs
+// * IncludeTests - include test files in analysis
+// * SetExitStatus - Set exit status to 1 if any issues are found.
+type Flags struct {
+	IncludeTests  bool
+	SetExitStatus bool
+}
+
 type unusedVisitor struct {
 	f *token.FileSet
 }
 
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
 // and walk the AST searching for unused function parameters.
-func CheckForUnusedFunctionArgs(args []string) error {
-
+func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
 	fset := token.NewFileSet()
-
-	files, err := parseInput(args, fset)
+	files, err := parseInput(args, fset, flags.IncludeTests)
 	if err != nil {
 		return fmt.Errorf("could not parse input %v", err)
 	}
