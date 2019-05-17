@@ -194,7 +194,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		default:
 			// nils will happen here without nil checks on my appends, meh
 			log.Printf("ERROR: unknown stmt type %T\n", s)
-
 		}
 
 		funcDecl.Body.List = funcDecl.Body.List[1:]

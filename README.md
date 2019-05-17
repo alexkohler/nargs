@@ -13,16 +13,15 @@ Similar to other Go static anaylsis tools (such as golint, go vet) , nakedret ca
     nargs [flags] files/directories/packages
 	
 ### Flags
-	- **-tests** (default true) - Include test files in analysis
-	- **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
+- **-tests** (default true) - Include test files in analysis
+- **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
 
 ## Purpose
 
 Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to find these types of functions.
 
-## Example
+## Examples
 
-Some simple examples
 ```Go
 // test.go
 package main
