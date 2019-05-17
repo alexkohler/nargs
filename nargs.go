@@ -16,6 +16,8 @@ type unusedVisitor struct {
 	f *token.FileSet
 }
 
+// CheckForUnusedFunctionArgs will parse the files/packages contained in args
+// and walk the AST searching for unused function parameters.
 func CheckForUnusedFunctionArgs(args []string) error {
 
 	fset := token.NewFileSet()
@@ -36,6 +38,7 @@ func CheckForUnusedFunctionArgs(args []string) error {
 	return nil
 }
 
+// Visit implements the ast.Visitor Visit method.
 func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// search for call expressions
@@ -46,11 +49,10 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	paramMap := make(map[string]bool)
 
-	if funcDecl.Type != nil && funcDecl.Type.Params != nil {
-
-		if funcDecl.Recv != nil {
-			for _, field := range funcDecl.Recv.List {
-				for _, name := range field.Names {
+	if funcDecl.Type != nil {
+		if funcDecl.Type.Params != nil {
+			for _, paramList := range funcDecl.Type.Params.List {
+				for _, name := range paramList.Names {
 					if name.Name == "_" {
 						continue
 					}
@@ -59,8 +61,21 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			}
 		}
 
-		for _, paramList := range funcDecl.Type.Params.List {
-			for _, name := range paramList.Names {
+		if funcDecl.Type.Results != nil {
+			for _, paramList := range funcDecl.Type.Results.List {
+				for _, name := range paramList.Names {
+					if name.Name == "_" {
+						continue
+					}
+					paramMap[name.Name] = false
+				}
+			}
+		}
+	}
+
+	if funcDecl.Recv != nil {
+		for _, field := range funcDecl.Recv.List {
+			for _, name := range field.Names {
 				if name.Name == "_" {
 					continue
 				}
@@ -69,14 +84,14 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 	}
 
-	if len(paramMap) == 0 || funcDecl.Body == nil {
+	if len(paramMap) == 0 {
 		return v
 	}
 
 	file := v.f.File(funcDecl.Pos())
 
 	// Analyze body of function
-	for len(funcDecl.Body.List) != 0 {
+	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
 		stmt := funcDecl.Body.List[0]
 
 		switch s := stmt.(type) {
@@ -175,12 +190,12 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		funcDecl.Body.List = funcDecl.Body.List[1:]
 	}
 
-	for key, val := range paramMap {
-		if !val {
+	for funcName, used := range paramMap {
+		if !used {
 			if file != nil {
 				if funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
-					log.Printf("%v:%v %v found unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, key)
+					log.Printf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName)
 				}
 			}
 		}
@@ -215,18 +230,10 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 		switch e := expr.(type) {
 		case *ast.Ident:
 			handleIdent(paramMap, e)
+
 		case *ast.BinaryExpr:
 			exprList = append(exprList, e.X) //TODO, do we need to then worry about x.left being used?
 			exprList = append(exprList, e.Y) //TODO, do we need to then worry about x.left being used?
-		case *ast.FuncLit:
-			stmtList = append(stmtList, e.Body)
-		case *ast.BasicLit:
-			// nothing to do here, no variable name
-		case *ast.SelectorExpr:
-			exprList = append(exprList, e.X)
-			handleIdent(paramMap, e.Sel)
-		case *ast.CompositeLit:
-			exprList = append(exprList, e.Elts...)
 
 		case *ast.CallExpr:
 			exprList = append(exprList, e.Args...)
@@ -236,45 +243,55 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			exprList = append(exprList, e.X)
 			exprList = append(exprList, e.Index)
 
-		case *ast.SliceExpr:
-			exprList = append(exprList, e.Low, e.High, e.Max, e.X)
-
-		case *ast.TypeAssertExpr:
-			exprList = append(exprList, e.X, e.Type)
-
-		case *ast.StarExpr:
-			exprList = append(exprList, e.X)
-
-		case *ast.UnaryExpr:
-			exprList = append(exprList, e.X)
-
-		case *ast.MapType:
-			exprList = append(exprList, e.Key, e.Value)
-
 		case *ast.KeyValueExpr:
 			exprList = append(exprList, e.Key, e.Value)
-
-		case *ast.ArrayType:
-			//TODO - is len needed here?
-			exprList = append(exprList, e.Elt, e.Len)
-
-			//TODO - struct type and interface type are trouble with fieldList
-
-		case *ast.ChanType:
-			exprList = append(exprList, e.Value)
 
 		case *ast.ParenExpr:
 			exprList = append(exprList, e.X)
 
-		case *ast.StructType:
-			exprList, stmtList = processFieldList(paramMap, e.Fields, exprList, stmtList)
+		case *ast.SelectorExpr:
+			exprList = append(exprList, e.X)
+			handleIdent(paramMap, e.Sel)
 
-		case *ast.InterfaceType:
-			exprList, stmtList = processFieldList(paramMap, e.Methods, exprList, stmtList)
+		case *ast.SliceExpr:
+			exprList = append(exprList, e.Low, e.High, e.Max, e.X)
+
+		case *ast.StarExpr:
+			exprList = append(exprList, e.X)
+
+		case *ast.TypeAssertExpr:
+			exprList = append(exprList, e.X, e.Type)
+
+		case *ast.UnaryExpr:
+			exprList = append(exprList, e.X)
+
+		case *ast.BasicLit:
+			// nothing to do here, no variable name
+
+		case *ast.FuncLit:
+			stmtList = append(stmtList, e.Body)
+
+		case *ast.CompositeLit:
+			exprList = append(exprList, e.Elts...)
+
+		case *ast.ArrayType:
+			exprList = append(exprList, e.Elt, e.Len)
+
+		case *ast.ChanType:
+			exprList = append(exprList, e.Value)
 
 		case *ast.FuncType:
 			exprList, stmtList = processFieldList(paramMap, e.Params, exprList, stmtList)
 			exprList, stmtList = processFieldList(paramMap, e.Results, exprList, stmtList)
+
+		case *ast.InterfaceType:
+			exprList, stmtList = processFieldList(paramMap, e.Methods, exprList, stmtList)
+
+		case *ast.MapType:
+			exprList = append(exprList, e.Key, e.Value)
+
+		case *ast.StructType:
+			exprList, stmtList = processFieldList(paramMap, e.Fields, exprList, stmtList)
 
 		case *ast.Ellipsis:
 			exprList = append(exprList, e.Elt)
@@ -283,7 +300,7 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			// no op
 
 		default:
-			fmt.Printf("@@@@@@@@@@ missing type %T\n", e)
+			log.Printf("ERROR: unknown expr type %T\n", e)
 		}
 		exprList = exprList[1:]
 	}
@@ -302,6 +319,5 @@ func processFieldList(paramMap map[string]bool, fieldList *ast.FieldList, exprLi
 
 		// don't care about Tag, need to handle ident and expr
 	}
-
 	return exprList, stmtList
 }
