@@ -16,7 +16,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 - **-tests** (default true) - Include test files in analysis
 - **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
 - **-named_returns** (default false) - Report unused named return arguments. This is false by default because named returns can be used to provide context to what's being returned.
-- **TODO -receivers** (default true) - Report unused function receivers. (TODO)
+- **-receivers** (default true) - Report unused function receivers.
 
 
 ## Purpose

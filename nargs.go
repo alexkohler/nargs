@@ -15,17 +15,20 @@ func init() {
 
 // Flags contains configuration specific to nargs
 // * IncludeTests - include test files in analysis
-// * SetExitStatus - Set exit status to 1 if any issues are found.
-// * IncludeNamedReturns - include named returns in analysis
+// * SetExitStatus - set exit status to 1 if any issues are found
+// * IncludeNamedReturns - include unused named returns
+// * IncludeReceivers - include unused receivers
 type Flags struct {
 	IncludeTests        bool
 	SetExitStatus       bool
 	IncludeNamedReturns bool
+	IncludeReceivers    bool
 }
 
 type unusedVisitor struct {
 	f                   *token.FileSet
 	includeNamedReturns bool
+	includeReceivers    bool
 	errsFound           bool
 }
 
@@ -41,6 +44,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
 	retVis := &unusedVisitor{
 		f:                   fset,
 		includeNamedReturns: flags.IncludeNamedReturns,
+		includeReceivers:    flags.IncludeReceivers,
 	}
 
 	for _, f := range files {
@@ -92,7 +96,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 	}
 
-	if funcDecl.Recv != nil {
+	if v.includeReceivers && funcDecl.Recv != nil {
 		for _, field := range funcDecl.Recv.List {
 			for _, name := range field.Names {
 				if name.Name == "_" {

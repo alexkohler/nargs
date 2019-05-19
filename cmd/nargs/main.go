@@ -23,6 +23,7 @@ func main() {
 	includeTests := flag.Bool("tests", true, "include test (*_test.go) files")
 	setExitStatus := flag.Bool("set_exit_status", true, "Set exit status to 1 if any issues are found")
 	includeNamedReturns := flag.Bool("named_returns", false, "Report unused named return arguments")
+	includeReceivers := flag.Bool("receivers", true, "Report unused function receivers")
 
 	flag.Parse()
 
@@ -30,11 +31,12 @@ func main() {
 		IncludeTests:        *includeTests,
 		SetExitStatus:       *setExitStatus,
 		IncludeNamedReturns: *includeNamedReturns,
+		IncludeReceivers:    *includeReceivers,
 	}
 
 	flag.Usage = usage
 
 	if err := nargs.CheckForUnusedFunctionArgs(flag.Args(), flags); err != nil {
-		log.Println(err)
+		log.Printf("ERROR: failed to run %s, %v\n", os.Args[0], err)
 	}
 }
