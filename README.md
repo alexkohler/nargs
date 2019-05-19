@@ -41,14 +41,14 @@ func (f) funcTwo(a int, b int, c int) int {
         return a + b
 }
 
-// Unused function receiver and unused function parameter. (unused function receivers
-// can be disabled with the -receivers flag)
-func (recv f) funcThree(z int) int {
+// Unused function receiver. Unused receivers are flagged by default. Flagging unused function receivers 
+// can be disabled by setting the -receivers flag to false.
+func (recv f) funcThree() int {
         return 5
 }
 
-// Unused named returns (if the -named_returns is set to true, 
-// these will be flagged. They are not flagged by default.)
+// Unused named returns. Unused named returns are NOT flagged by deault. Flagging unused named returns 
+// can be enabled by setting the -named_returns flag to true.
 func funcFour() (namedReturn int) {
 	return
 }
@@ -58,7 +58,6 @@ func funcFour() (namedReturn int) {
 $ nargs -named-returns=true main.go 
 test.go:5 funcOne contains unused parameter c
 test.go:12 funcTwo contains unused parameter c
-test.go:17 funcThree contains unused parameter z
 test.go:17 funcThree contains unused parameter recv
 test.go:22 funcFour contains unused parameter namedReturn
 ```
@@ -108,7 +107,7 @@ If you've enjoyed nargs, take a look at my other static anaylsis tools!
 - [prealloc](https://github.com/alexkohler/prealloc) - Finds slice declarations that could potentially be preallocated.
 - [nakedret](https://github.com/alexkohler/nakedret) - Finds naked returns.
 - [identypo](https://github.com/alexkohler/identypo) - Finds typos in identifiers (functions, function calls, variables, constants, type declarations, packages, labels) including CamelCased functions, variables, etc. 
-- [unimport](https://github.com/alexkohler/unimport) - Finds unnecessary import aliases
+- [unimport](https://github.com/alexkohler/unimport) - Finds unnecessary import aliases.
 - [dogsled](https://github.com/alexkohler/dogsled) - Finds assignments/declarations with too many blank identifiers (e.g. x, _, _, _, := f()).
 
 
