@@ -21,7 +21,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 
 ## Purpose
 
-Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is not used.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tools was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is intentionally not used.
 
 ## Examples
 
@@ -76,7 +76,7 @@ test.go:5:28: c is unused
 
 ### How should these issues be fixed?
 
-In simple cases, the arguments can simply be removed. nargs ignores function variables using the blank identifier `_`, and encourages the use of the blank identifier in the event that the parameter cannot be removed from the function due to implementing an interface or function typedef. If this is the case, the following can be done to fix the above example:
+If the function is implementing an interface or function typedef, the blank identifier `_` should be used and `nargs` will no longer flag the parameter as being unused. In other cases, the arguments can simply be removed. Suppose all the functions from our example above were implementing an interface or function typedef. Then, the following can be done to fix the above example:
 
 ```Go
 package main
