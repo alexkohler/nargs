@@ -66,7 +66,7 @@ test.go:22 funcFour contains unused parameter namedReturn
 
 ### How is this different than [unparam](https://github.com/mvdan/unparam)?
 
-`unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne.
+By design, `unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implmenting an interface.
 
 ```Bash
 $ unparam test.go 
