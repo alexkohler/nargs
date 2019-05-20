@@ -111,7 +111,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
 		stmt := funcDecl.Body.List[0]
-
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Init, s.Body, s.Else)
@@ -199,7 +198,10 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			handleIdent(paramMap, s.Label)
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Stmt)
 
-		case nil, *ast.IncDecStmt, *ast.EmptyStmt:
+		case *ast.IncDecStmt:
+			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+
+		case nil, *ast.EmptyStmt:
 			//no-op
 
 		default:
@@ -237,12 +239,18 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 	}
 
 	if ident.Obj != nil && ident.Obj.Kind == ast.Var {
-		paramMap[ident.Obj.Name] = true
+		if _, ok := paramMap[ident.Obj.Name]; ok {
+			paramMap[ident.Obj.Name] = true
+		} else {
+			paramMap[ident.Obj.Name] = false
+		}
 	}
 
-	if _, ok := paramMap[ident.Name]; ok {
-		paramMap[ident.Name] = true
-	}
+	//TODO - ensure this truly isn't needed - can we rely on the
+	// ident object name?
+	// if _, ok := paramMap[ident.Name]; ok {
+	// 	paramMap[ident.Name] = true
+	// }
 }
 
 func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
@@ -290,6 +298,7 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			// nothing to do here, no variable name
 
 		case *ast.FuncLit:
+			exprList = append(exprList, e.Type)
 			stmtList = append(stmtList, e.Body)
 
 		case *ast.CompositeLit:

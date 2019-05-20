@@ -43,6 +43,7 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 				"testdata/test.go:4 funcOne contains unused parameter c\n",
 				"testdata/test.go:11 funcTwo contains unused parameter c\n",
 				"testdata/test.go:17 funcThree contains unused parameter recv\n",
+				"testdata/test.go:27 closure contains unused parameter v\n",
 			},
 			wantExitWithStatus: true,
 			wantErr:            false,
@@ -62,7 +63,7 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 				"testdata/test.go:11 funcTwo contains unused parameter c\n",
 				"testdata/test.go:17 funcThree contains unused parameter recv\n",
 				"testdata/test.go:23 funcFour contains unused parameter namedReturn\n",
-				// "testdata/test.go:27 closure contains unused parameter v\n",
+				"testdata/test.go:27 closure contains unused parameter v\n",
 			},
 			wantExitWithStatus: true,
 			wantErr:            false,
@@ -76,7 +77,7 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(gotResults, tt.wantResults) {
-				t.Errorf("CheckForUnusedFunctionArgs() gotResults = %v, want %v", gotResults, tt.wantResults)
+				t.Errorf("CheckForUnusedFunctionArgs()\ngot = %v,\nwant %v", gotResults, tt.wantResults)
 			}
 			if gotExitWithStatus != tt.wantExitWithStatus {
 				t.Errorf("CheckForUnusedFunctionArgs() gotExitWithStatus = %v, want %v", gotExitWithStatus, tt.wantExitWithStatus)
