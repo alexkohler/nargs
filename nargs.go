@@ -6,7 +6,6 @@ import (
 	"go/build"
 	"go/token"
 	"log"
-	"os"
 )
 
 func init() {
@@ -27,6 +26,7 @@ type Flags struct {
 
 type unusedVisitor struct {
 	f                   *token.FileSet
+	results             []string
 	includeNamedReturns bool
 	includeReceivers    bool
 	errsFound           bool
@@ -34,11 +34,11 @@ type unusedVisitor struct {
 
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
 // and walk the AST searching for unused function parameters.
-func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
+func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, exitWithStatus bool, _ error) {
 	fset := token.NewFileSet()
 	files, err := parseInput(args, fset, flags.IncludeTests)
 	if err != nil {
-		return fmt.Errorf("could not parse input %v", err)
+		return nil, false, fmt.Errorf("could not parse input, %v", err)
 	}
 
 	retVis := &unusedVisitor{
@@ -54,11 +54,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) error {
 		ast.Walk(retVis, f)
 	}
 
-	if retVis.errsFound && flags.SetExitStatus {
-		os.Exit(1)
-	}
-
-	return nil
+	return retVis.results, retVis.errsFound && flags.SetExitStatus, nil
 }
 
 // Visit implements the ast.Visitor Visit method.
@@ -107,9 +103,8 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 	}
 
-	if len(paramMap) == 0 {
-		return v
-	}
+	// We cannot exit if len(paramMap) == 0, we may have a function closure with
+	// unused variables
 
 	file := v.f.File(funcDecl.Pos())
 
@@ -220,7 +215,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 				if funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
 					//TODO differentiation of used parameter vs. receiver?
-					log.Printf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName)
+					v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
 					v.errsFound = true
 				}
 			}
@@ -283,7 +278,7 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			exprList = append(exprList, e.Low, e.High, e.Max, e.X)
 
 		case *ast.StarExpr:
-			exprList = append(exprList, e.X)
+			// nothing to do here, this is a type (i.e. name will be "int")
 
 		case *ast.TypeAssertExpr:
 			exprList = append(exprList, e.X, e.Type)

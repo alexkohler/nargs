@@ -36,7 +36,16 @@ func main() {
 
 	flag.Usage = usage
 
-	if err := nargs.CheckForUnusedFunctionArgs(flag.Args(), flags); err != nil {
+	results, exitWithCode, err := nargs.CheckForUnusedFunctionArgs(flag.Args(), flags)
+	if err != nil {
 		log.Printf("ERROR: failed to run %s, %v\n", os.Args[0], err)
+	}
+
+	for _, result := range results {
+		log.Printf(result)
+	}
+
+	if exitWithCode {
+		os.Exit(1)
 	}
 }
