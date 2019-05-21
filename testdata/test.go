@@ -31,3 +31,6 @@ func closure() {
 	}
 	c(1)
 }
+
+func unusedFunc(f func()) {
+}
