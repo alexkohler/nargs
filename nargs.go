@@ -203,7 +203,9 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 		if _, ok := paramMap[ident.Obj.Name]; ok {
 			paramMap[ident.Obj.Name] = true
 		} else {
-			paramMap[ident.Obj.Name] = false
+			if ident.Obj.Name != "_" {
+				paramMap[ident.Obj.Name] = false
+			}
 		}
 	}
 
@@ -337,7 +339,9 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 							funcParamMap := make(map[string]bool)
 							for _, param := range funcLit.Type.Params.List {
 								for _, paramName := range param.Names {
-									funcParamMap[paramName.Name] = false
+									if paramName.Name != "_" {
+										funcParamMap[paramName.Name] = false
+									}
 								}
 							}
 
@@ -345,7 +349,7 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 							v.handleStmts(funcParamMap, []ast.Stmt{funcLit.Body})
 
 							for paramName, used := range funcParamMap {
-								if !used {
+								if !used && paramName != "_" {
 									//TODO: this append currently causes things to appear out of order
 									file := v.fileSet.File(funcLit.Pos())
 									v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName))
