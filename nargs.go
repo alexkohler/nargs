@@ -5,12 +5,18 @@ import (
 	"go/ast"
 	"go/build"
 	"go/token"
+	"go/types"
 	"log"
+	"sync"
+
+	"golang.org/x/tools/go/packages"
 )
 
 func init() {
 	build.Default.UseAllFiles = true
 }
+
+//TODO - should look for callexpr without assign statement then check the returns?
 
 // Flags contains configuration specific to nargs
 // * IncludeTests - include test files in analysis
@@ -26,6 +32,7 @@ type Flags struct {
 
 type unusedVisitor struct {
 	f                   *token.FileSet
+	pkg                 *packages.Package
 	results             []string
 	includeNamedReturns bool
 	includeReceivers    bool
@@ -35,26 +42,94 @@ type unusedVisitor struct {
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
 // and walk the AST searching for unused function parameters.
 func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, exitWithStatus bool, _ error) {
-	fset := token.NewFileSet()
-	files, err := parseInput(args, fset, flags.IncludeTests)
+	// We'll probably only want to accept packges.
+
+	//TODO wire in slice for go list -f '{{ .Imports }}' github.com/alexkohler/nargs
+
+	pkgsStr := []string{"github.com/alexkohler/nargs", "fmt", "go/ast", "go/build", "go/parser", "go/token", "go/types", "golang.org/x/tools/go/packages", "log", "os", "path", "path/filepath", "regexp", "runtime", "strings"}
+
+	cfg := &packages.Config{
+		Mode:  packages.LoadAllSyntax,
+		Tests: false,
+		// BuildFlags: []string{fmt.Sprintf("-tags=%s", strings.Join(c.Tags, " "))},
+	}
+
+	pkgs, err := packages.Load(cfg, pkgsStr...)
 	if err != nil {
-		return nil, false, fmt.Errorf("could not parse input, %v", err)
+		panic(err)
 	}
 
 	retVis := &unusedVisitor{
-		f:                   fset,
 		includeNamedReturns: flags.IncludeNamedReturns,
 		includeReceivers:    flags.IncludeReceivers,
 	}
 
-	for _, f := range files {
-		if f == nil {
-			continue
-		}
-		ast.Walk(retVis, f)
+	var wg sync.WaitGroup
+	for _, pkg := range pkgs {
+		wg.Add(1)
+
+		go func(pkg *packages.Package) {
+			defer wg.Done()
+			log.Printf("Checking %s\n", pkg.Types.Path())
+			retVis.pkg = pkg
+
+			for _, astFile := range pkg.Syntax {
+				ast.Walk(retVis, astFile)
+			}
+		}(pkg)
+		wg.Wait()
 	}
 
 	return retVis.results, retVis.errsFound && flags.SetExitStatus, nil
+}
+
+func (v *unusedVisitor) errorsByArg(call *ast.CallExpr) {
+	if call == nil {
+		return
+	}
+	if v.pkg == nil || v.pkg.TypesInfo == nil {
+		return
+	}
+	if _, ok := v.pkg.TypesInfo.Types[call]; !ok {
+		return
+	}
+	fmt.Printf("checking out %+v: ", call.Fun)
+	switch v.pkg.TypesInfo.Types[call].Type.(type) {
+	case *types.Named:
+		fmt.Printf("sangle dangle\n")
+	case *types.Pointer:
+		fmt.Printf("sangle dangle 2\n")
+	case *types.Tuple:
+		fmt.Printf("tuple\n")
+	default:
+		fmt.Printf("defaaa\n")
+
+	}
+	// switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
+	// case *types.Named:
+	// 	// Single return
+	// 	return []bool{isErrorType(t)}
+	// case *types.Pointer:
+	// 	// Single return via pointer
+	// 	return []bool{isErrorType(t)}
+	// case *types.Tuple:
+	// 	// Multiple returns
+	// 	s := make([]bool, t.Len())
+	// 	for i := 0; i < t.Len(); i++ {
+	// 		switch et := t.At(i).Type().(type) {
+	// 		case *types.Named:
+	// 			// Single return
+	// 			s[i] = isErrorType(et)
+	// 		case *types.Pointer:
+	// 			// Single return via pointer
+	// 			s[i] = isErrorType(et)
+	// 		default:
+	// 			s[i] = false
+	// 		}
+	// 	}
+	// 	return s
+	// }
+	// return []bool{false}
 }
 
 // Visit implements the ast.Visitor Visit method.
@@ -106,7 +181,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	// We cannot exit if len(paramMap) == 0, we may have a function closure with
 	// unused variables
 
-	file := v.f.File(funcDecl.Pos())
+	// file := v.f.File(funcDecl.Pos())
 
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
@@ -114,18 +189,18 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Init, s.Body, s.Else)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
 
 		case *ast.AssignStmt:
 			//TODO see if variables on LHS are used? i.e. add them to param map?
-			funcDecl.Body.List = handleExprs(paramMap, s.Lhs, funcDecl.Body.List)
-			funcDecl.Body.List = handleExprs(paramMap, s.Rhs, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, s.Lhs, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, s.Rhs, funcDecl.Body.List)
 
 		case *ast.BlockStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.List...)
 
 		case *ast.ReturnStmt:
-			funcDecl.Body.List = handleExprs(paramMap, s.Results, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, s.Results, funcDecl.Body.List)
 
 		case *ast.DeclStmt:
 			switch d := s.Decl.(type) {
@@ -134,12 +209,12 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 					switch specType := spec.(type) {
 					case *ast.ValueSpec:
 						handleIdents(paramMap, specType.Names)
-						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
-						funcDecl.Body.List = handleExprs(paramMap, specType.Values, funcDecl.Body.List)
+						funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
+						funcDecl.Body.List = v.handleExprs(paramMap, specType.Values, funcDecl.Body.List)
 
 					case *ast.TypeSpec:
 						handleIdent(paramMap, specType.Name)
-						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
+						funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
 
 					default:
 						log.Printf("ERROR: unknown spec type %T\n", specType)
@@ -151,15 +226,15 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			}
 
 		case *ast.ExprStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case *ast.RangeStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case *ast.ForStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
 
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Post)
 
@@ -167,18 +242,18 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Assign, s.Init)
 
 		case *ast.CaseClause:
-			funcDecl.Body.List = handleExprs(paramMap, s.List, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, s.List, funcDecl.Body.List)
 
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body...)
 
 		case *ast.SendStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Chan, s.Value}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Chan, s.Value}, funcDecl.Body.List)
 
 		case *ast.GoStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
 
 		case *ast.DeferStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
 
 		case *ast.SelectStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
@@ -192,14 +267,14 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 		case *ast.SwitchStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Init)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
 
 		case *ast.LabeledStmt:
 			handleIdent(paramMap, s.Label)
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Stmt)
 
 		case *ast.IncDecStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case nil, *ast.EmptyStmt:
 			//no-op
@@ -211,18 +286,18 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		funcDecl.Body.List = funcDecl.Body.List[1:]
 	}
 
-	for funcName, used := range paramMap {
-		if !used {
-			if file != nil {
-				if funcDecl.Name != nil {
-					//TODO print parameter vs parameter(s)?
-					//TODO differentiation of used parameter vs. receiver?
-					v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
-					v.errsFound = true
-				}
-			}
-		}
-	}
+	// for funcName, used := range paramMap {
+	// 	if !used {
+	// 		if file != nil {
+	// 			if funcDecl.Name != nil {
+	// 				//TODO print parameter vs parameter(s)?
+	// 				//TODO differentiation of used parameter vs. receiver?
+	// 				v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
+	// 				v.errsFound = true
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	return v
 }
@@ -253,9 +328,10 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 	// }
 }
 
-func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
+func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
 	for len(exprList) != 0 {
 		expr := exprList[0]
+
 		switch e := expr.(type) {
 		case *ast.Ident:
 			handleIdent(paramMap, e)
@@ -265,6 +341,8 @@ func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.S
 			exprList = append(exprList, e.Y) //TODO, do we need to then worry about x.left being used?
 
 		case *ast.CallExpr:
+			// fmt.Println("got some call exprs :))))")
+			v.errorsByArg(e)
 			exprList = append(exprList, e.Args...)
 			exprList = append(exprList, e.Fun)
 
