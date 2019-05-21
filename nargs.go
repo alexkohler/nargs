@@ -25,7 +25,7 @@ type Flags struct {
 }
 
 type unusedVisitor struct {
-	f                   *token.FileSet
+	fileSet             *token.FileSet
 	results             []string
 	includeNamedReturns bool
 	includeReceivers    bool
@@ -42,7 +42,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 	}
 
 	retVis := &unusedVisitor{
-		f:                   fset,
+		fileSet:             fset,
 		includeNamedReturns: flags.IncludeNamedReturns,
 		includeReceivers:    flags.IncludeReceivers,
 	}
@@ -60,161 +60,38 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 // Visit implements the ast.Visitor Visit method.
 func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
-	// search for call expressions
-	funcDecl, ok := node.(*ast.FuncDecl)
-	if !ok {
-		return v
-	}
-
+	var stmtList []ast.Stmt
+	var file *token.File
 	paramMap := make(map[string]bool)
+	var funcDecl *ast.FuncDecl
 
-	if funcDecl.Type != nil {
-		if funcDecl.Type.Params != nil {
-			for _, paramList := range funcDecl.Type.Params.List {
-				for _, name := range paramList.Names {
-					if name.Name == "_" {
-						continue
-					}
-					paramMap[name.Name] = false
-				}
-			}
+	switch topLevelType := node.(type) {
+	case *ast.FuncDecl:
+		funcDecl = topLevelType
+		stmtList = v.handleFuncDecl(paramMap, funcDecl, stmtList)
+		file = v.fileSet.File(funcDecl.Pos())
+
+	case *ast.File:
+		file = v.fileSet.File(topLevelType.Pos())
+		if topLevelType.Decls != nil {
+			stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
 		}
 
-		if v.includeNamedReturns && funcDecl.Type.Results != nil {
-			for _, paramList := range funcDecl.Type.Results.List {
-				for _, name := range paramList.Names {
-					if name.Name == "_" {
-						continue
-					}
-					paramMap[name.Name] = false
-				}
-			}
-		}
-	}
+	default:
+		return v
 
-	if v.includeReceivers && funcDecl.Recv != nil {
-		for _, field := range funcDecl.Recv.List {
-			for _, name := range field.Names {
-				if name.Name == "_" {
-					continue
-				}
-				paramMap[name.Name] = false
-			}
-		}
 	}
 
 	// We cannot exit if len(paramMap) == 0, we may have a function closure with
 	// unused variables
 
-	file := v.f.File(funcDecl.Pos())
-
 	// Analyze body of function
-	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
-		stmt := funcDecl.Body.List[0]
-		switch s := stmt.(type) {
-		case *ast.IfStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Init, s.Body, s.Else)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
-
-		case *ast.AssignStmt:
-			//TODO see if variables on LHS are used? i.e. add them to param map?
-			funcDecl.Body.List = handleExprs(paramMap, s.Lhs, funcDecl.Body.List)
-			funcDecl.Body.List = handleExprs(paramMap, s.Rhs, funcDecl.Body.List)
-
-		case *ast.BlockStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.List...)
-
-		case *ast.ReturnStmt:
-			funcDecl.Body.List = handleExprs(paramMap, s.Results, funcDecl.Body.List)
-
-		case *ast.DeclStmt:
-			switch d := s.Decl.(type) {
-			case *ast.GenDecl:
-				for _, spec := range d.Specs {
-					switch specType := spec.(type) {
-					case *ast.ValueSpec:
-						handleIdents(paramMap, specType.Names)
-						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
-						funcDecl.Body.List = handleExprs(paramMap, specType.Values, funcDecl.Body.List)
-
-					case *ast.TypeSpec:
-						handleIdent(paramMap, specType.Name)
-						funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{specType.Type}, funcDecl.Body.List)
-
-					default:
-						log.Printf("ERROR: unknown spec type %T\n", specType)
-					}
-				}
-
-			default:
-				log.Printf("ERROR: unknown decl type %T\n", d)
-			}
-
-		case *ast.ExprStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
-
-		case *ast.RangeStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
-
-		case *ast.ForStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Cond}, funcDecl.Body.List)
-
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Post)
-
-		case *ast.TypeSwitchStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Assign, s.Init)
-
-		case *ast.CaseClause:
-			funcDecl.Body.List = handleExprs(paramMap, s.List, funcDecl.Body.List)
-
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body...)
-
-		case *ast.SendStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Chan, s.Value}, funcDecl.Body.List)
-
-		case *ast.GoStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
-
-		case *ast.DeferStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Call}, funcDecl.Body.List)
-
-		case *ast.SelectStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
-
-		case *ast.CommClause:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body...)
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Comm)
-
-		case *ast.BranchStmt:
-			handleIdent(paramMap, s.Label)
-
-		case *ast.SwitchStmt:
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Body, s.Init)
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.Tag}, funcDecl.Body.List)
-
-		case *ast.LabeledStmt:
-			handleIdent(paramMap, s.Label)
-			funcDecl.Body.List = append(funcDecl.Body.List, s.Stmt)
-
-		case *ast.IncDecStmt:
-			funcDecl.Body.List = handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
-
-		case nil, *ast.EmptyStmt:
-			//no-op
-
-		default:
-			log.Printf("ERROR: unknown stmt type %T\n", s)
-		}
-
-		funcDecl.Body.List = funcDecl.Body.List[1:]
-	}
+	v.handleStmts(paramMap, stmtList)
 
 	for funcName, used := range paramMap {
 		if !used {
 			if file != nil {
-				if funcDecl.Name != nil {
+				if funcDecl != nil && funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
 					//TODO differentiation of used parameter vs. receiver?
 					v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
@@ -225,6 +102,90 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	}
 
 	return v
+}
+
+func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stmt) {
+	for len(stmtList) != 0 {
+		stmt := stmtList[0]
+		switch s := stmt.(type) {
+		case *ast.IfStmt:
+			stmtList = append(stmtList, s.Init, s.Body, s.Else)
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Cond}, stmtList)
+
+		case *ast.AssignStmt:
+			//TODO see if variables on LHS are used? i.e. add them to param map?
+			stmtList = v.handleExprs(paramMap, s.Lhs, stmtList)
+			stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
+
+		case *ast.BlockStmt:
+			stmtList = append(stmtList, s.List...)
+
+		case *ast.ReturnStmt:
+			stmtList = v.handleExprs(paramMap, s.Results, stmtList)
+
+		case *ast.DeclStmt:
+			stmtList = v.handleDecls(paramMap, []ast.Decl{s.Decl}, stmtList)
+
+		case *ast.ExprStmt:
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.X}, stmtList)
+
+		case *ast.RangeStmt:
+			stmtList = append(stmtList, s.Body)
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.X}, stmtList)
+
+		case *ast.ForStmt:
+			stmtList = append(stmtList, s.Body)
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Cond}, stmtList)
+
+			stmtList = append(stmtList, s.Post)
+
+		case *ast.TypeSwitchStmt:
+			stmtList = append(stmtList, s.Body, s.Assign, s.Init)
+
+		case *ast.CaseClause:
+			stmtList = v.handleExprs(paramMap, s.List, stmtList)
+
+			stmtList = append(stmtList, s.Body...)
+
+		case *ast.SendStmt:
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Chan, s.Value}, stmtList)
+
+		case *ast.GoStmt:
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Call}, stmtList)
+
+		case *ast.DeferStmt:
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Call}, stmtList)
+
+		case *ast.SelectStmt:
+			stmtList = append(stmtList, s.Body)
+
+		case *ast.CommClause:
+			stmtList = append(stmtList, s.Body...)
+			stmtList = append(stmtList, s.Comm)
+
+		case *ast.BranchStmt:
+			handleIdent(paramMap, s.Label)
+
+		case *ast.SwitchStmt:
+			stmtList = append(stmtList, s.Body, s.Init)
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Tag}, stmtList)
+
+		case *ast.LabeledStmt:
+			handleIdent(paramMap, s.Label)
+			stmtList = append(stmtList, s.Stmt)
+
+		case *ast.IncDecStmt:
+			stmtList = v.handleExprs(paramMap, []ast.Expr{s.X}, stmtList)
+
+		case nil, *ast.EmptyStmt:
+			//no-op
+
+		default:
+			log.Printf("ERROR: unknown stmt type %T\n", s)
+		}
+
+		stmtList = stmtList[1:]
+	}
 }
 
 func handleIdents(paramMap map[string]bool, identList []*ast.Ident) {
@@ -253,7 +214,7 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 	// }
 }
 
-func handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
+func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Expr, stmtList []ast.Stmt) []ast.Stmt {
 	for len(exprList) != 0 {
 		expr := exprList[0]
 		switch e := expr.(type) {
@@ -348,4 +309,109 @@ func handleFieldList(paramMap map[string]bool, fieldList *ast.FieldList, exprLis
 		handleIdents(paramMap, field.Names)
 	}
 	return exprList, stmtList
+}
+
+func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, initialStmts []ast.Stmt) []ast.Stmt {
+	for _, decl := range decls {
+		switch d := decl.(type) {
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch specType := spec.(type) {
+				case *ast.ValueSpec:
+					//TODO - I think the only specs we care about here are when we have a function declaration
+					handleIdents(paramMap, specType.Names)
+					initialStmts = v.handleExprs(paramMap, []ast.Expr{specType.Type}, initialStmts)
+					initialStmts = v.handleExprs(paramMap, specType.Values, initialStmts)
+
+					for index, value := range specType.Values {
+						funcLit, ok := value.(*ast.FuncLit)
+						if !ok {
+							continue
+						}
+						// get arguments of function, this is a candidate
+						// with potentially unused arguments
+						if funcLit.Type != nil && funcLit.Type.Params != nil && len(funcLit.Type.Params.List) > 0 {
+							// declare a separate parameter map for handling
+							funcName := specType.Names[index]
+
+							funcParamMap := make(map[string]bool)
+							for _, param := range funcLit.Type.Params.List {
+								for _, paramName := range param.Names {
+									funcParamMap[paramName.Name] = false
+								}
+							}
+
+							// generate potential statements
+							v.handleStmts(funcParamMap, []ast.Stmt{funcLit.Body})
+
+							for paramName, used := range funcParamMap {
+								if !used {
+									//TODO: this append currently causes things to appear out of order
+									file := v.fileSet.File(funcLit.Pos())
+									v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName))
+								}
+							}
+						}
+					}
+
+				case *ast.TypeSpec:
+					handleIdent(paramMap, specType.Name)
+					initialStmts = v.handleExprs(paramMap, []ast.Expr{specType.Type}, initialStmts)
+
+				case *ast.ImportSpec:
+					// no-op, ImportSpecs do not contain functions
+
+				default:
+					log.Printf("ERROR: unknown spec type %T\n", specType)
+				}
+			}
+		case *ast.FuncDecl:
+			initialStmts = v.handleFuncDecl(paramMap, d, initialStmts)
+		default:
+			log.Printf("ERROR: unknown decl type %T\n", d)
+		}
+	}
+	return initialStmts
+}
+
+func (v *unusedVisitor) handleFuncDecl(paramMap map[string]bool, funcDecl *ast.FuncDecl, initialStmts []ast.Stmt) []ast.Stmt {
+	if funcDecl.Body != nil {
+		initialStmts = append(initialStmts, funcDecl.Body.List...)
+	}
+	if funcDecl.Type != nil {
+		if funcDecl.Type.Params != nil {
+			for _, paramList := range funcDecl.Type.Params.List {
+				for _, name := range paramList.Names {
+					if name.Name == "_" {
+						continue
+					}
+					paramMap[name.Name] = false
+				}
+			}
+		}
+
+		if v.includeNamedReturns && funcDecl.Type.Results != nil {
+			for _, paramList := range funcDecl.Type.Results.List {
+				for _, name := range paramList.Names {
+					if name.Name == "_" {
+						continue
+					}
+					paramMap[name.Name] = false
+				}
+			}
+		}
+	}
+
+	if v.includeReceivers && funcDecl.Recv != nil {
+		for _, field := range funcDecl.Recv.List {
+			for _, name := range field.Names {
+				if name.Name == "_" {
+					continue
+				}
+				paramMap[name.Name] = false
+			}
+		}
+	}
+
+	return initialStmts
 }

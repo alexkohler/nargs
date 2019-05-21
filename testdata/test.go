@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 // Unused function parameter on function
 func funcOne(a int, b int, c int) int {
 	return a + b
@@ -33,4 +35,17 @@ func closure() {
 }
 
 func unusedFunc(f func()) {
+}
+
+var z = func(i int) {
+	fmt.Println()
+}
+
+// Unsupported:
+var usedAsGlobalInterfaceMapValue = map[string]interface{}{
+	"someFunc": func(i int, s string) {
+		if i == 0 {
+			println()
+		}
+	},
 }
