@@ -284,7 +284,8 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			exprList = append(exprList, e.Key, e.Value)
 
 		case *ast.StructType:
-			exprList, stmtList = handleFieldList(paramMap, e.Fields, exprList, stmtList)
+			//TODO: no-op,  unless it contains funcs I guess, revisit this
+			// exprList, stmtList = handleFieldList(paramMap, e.Fields, exprList, stmtList)
 
 		case *ast.Ellipsis:
 			exprList = append(exprList, e.Elt)
