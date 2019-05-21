@@ -71,11 +71,12 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		stmtList = v.handleFuncDecl(paramMap, funcDecl, stmtList)
 		file = v.fileSet.File(funcDecl.Pos())
 
-	case *ast.File:
-		file = v.fileSet.File(topLevelType.Pos())
-		if topLevelType.Decls != nil {
-			stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
-		}
+		//TODO - revisit var func case
+	// case *ast.File:
+	// 	file = v.fileSet.File(topLevelType.Pos())
+	// 	if topLevelType.Decls != nil {
+	// 		stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
+	// 	}
 
 	default:
 		return v
@@ -114,8 +115,21 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 
 		case *ast.AssignStmt:
 			//TODO see if variables on LHS are used? i.e. add them to param map?
-			stmtList = v.handleExprs(paramMap, s.Lhs, stmtList)
-			stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
+			// stmtList = v.handleExprs(paramMap, s.Lhs, stmtList)
+			// stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
+
+			//TODO - needed?
+			for index, right := range s.Rhs {
+				funcLit, ok := right.(*ast.FuncLit)
+				if !ok {
+					continue
+				}
+				funcName, ok := s.Lhs[index].(*ast.Ident)
+				if !ok {
+					log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@2 wat")
+				}
+				v.handleFuncLit(funcLit, funcName)
+			}
 
 		case *ast.BlockStmt:
 			stmtList = append(stmtList, s.List...)
@@ -202,11 +216,12 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 	if ident.Obj != nil && ident.Obj.Kind == ast.Var {
 		if _, ok := paramMap[ident.Obj.Name]; ok {
 			paramMap[ident.Obj.Name] = true
-		} else {
+		}
+		/*else {
 			if ident.Obj.Name != "_" {
 				paramMap[ident.Obj.Name] = false
 			}
-		}
+		}*/
 	}
 
 	//TODO - ensure this truly isn't needed - can we rely on the
@@ -331,32 +346,10 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 						if !ok {
 							continue
 						}
+						funcName := specType.Names[index]
 						// get arguments of function, this is a candidate
 						// with potentially unused arguments
-						if funcLit.Type != nil && funcLit.Type.Params != nil && len(funcLit.Type.Params.List) > 0 {
-							// declare a separate parameter map for handling
-							funcName := specType.Names[index]
-
-							funcParamMap := make(map[string]bool)
-							for _, param := range funcLit.Type.Params.List {
-								for _, paramName := range param.Names {
-									if paramName.Name != "_" {
-										funcParamMap[paramName.Name] = false
-									}
-								}
-							}
-
-							// generate potential statements
-							v.handleStmts(funcParamMap, []ast.Stmt{funcLit.Body})
-
-							for paramName, used := range funcParamMap {
-								if !used && paramName != "_" {
-									//TODO: this append currently causes things to appear out of order
-									file := v.fileSet.File(funcLit.Pos())
-									v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName))
-								}
-							}
-						}
+						v.handleFuncLit(funcLit, funcName)
 					}
 
 				case *ast.TypeSpec:
@@ -377,6 +370,32 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 		}
 	}
 	return initialStmts
+}
+
+func (v *unusedVisitor) handleFuncLit(funcLit *ast.FuncLit, funcName *ast.Ident) {
+	if funcLit.Type != nil && funcLit.Type.Params != nil && len(funcLit.Type.Params.List) > 0 {
+		// declare a separate parameter map for handling
+
+		funcParamMap := make(map[string]bool)
+		for _, param := range funcLit.Type.Params.List {
+			for _, paramName := range param.Names {
+				if paramName.Name != "_" {
+					funcParamMap[paramName.Name] = false
+				}
+			}
+		}
+
+		// generate potential statements
+		v.handleStmts(funcParamMap, []ast.Stmt{funcLit.Body})
+
+		for paramName, used := range funcParamMap {
+			if !used && paramName != "_" {
+				//TODO: this append currently causes things to appear out of order (2)
+				file := v.fileSet.File(funcLit.Pos())
+				v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName))
+			}
+		}
+	}
 }
 
 func (v *unusedVisitor) handleFuncDecl(paramMap map[string]bool, funcDecl *ast.FuncDecl, initialStmts []ast.Stmt) []ast.Stmt {
