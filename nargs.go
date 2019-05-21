@@ -6,6 +6,9 @@ import (
 	"go/build"
 	"go/token"
 	"log"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 func init() {
@@ -26,7 +29,7 @@ type Flags struct {
 
 type unusedVisitor struct {
 	fileSet             *token.FileSet
-	results             []string
+	resultsSet          map[string]struct{}
 	includeNamedReturns bool
 	includeReceivers    bool
 	errsFound           bool
@@ -45,6 +48,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 		fileSet:             fset,
 		includeNamedReturns: flags.IncludeNamedReturns,
 		includeReceivers:    flags.IncludeReceivers,
+		resultsSet:          make(map[string]struct{}),
 	}
 
 	for _, f := range files {
@@ -54,8 +58,30 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 		ast.Walk(retVis, f)
 	}
 
-	return retVis.results, retVis.errsFound && flags.SetExitStatus, nil
+	results = make([]string, 0, len(retVis.resultsSet))
+	for result, _ := range retVis.resultsSet {
+		results = append(results, result)
+	}
+	sort.Sort(byLineNumber(results))
+
+	return results, retVis.errsFound && flags.SetExitStatus, nil
 }
+
+// Not proud of this, please look away :)
+type byLineNumber []string
+
+func (a byLineNumber) Len() int { return len(a) }
+func (a byLineNumber) Less(i, j int) bool {
+	iLine := strings.Split(a[i], ":")
+	num := strings.Split(iLine[1], " ")
+	iNum, _ := strconv.Atoi(num[0])
+
+	jLine := strings.Split(a[j], ":")
+	num = strings.Split(jLine[1], " ")
+	jNum, _ := strconv.Atoi(num[0])
+	return iNum < jNum
+}
+func (a byLineNumber) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 // Visit implements the ast.Visitor Visit method.
 func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
@@ -72,11 +98,11 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		file = v.fileSet.File(funcDecl.Pos())
 
 		//TODO - revisit var func case
-	// case *ast.File:
-	// 	file = v.fileSet.File(topLevelType.Pos())
-	// 	if topLevelType.Decls != nil {
-	// 		stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
-	// 	}
+	case *ast.File:
+		file = v.fileSet.File(topLevelType.Pos())
+		if topLevelType.Decls != nil {
+			stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
+		}
 
 	default:
 		return v
@@ -95,7 +121,8 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 				if funcDecl != nil && funcDecl.Name != nil {
 					//TODO print parameter vs parameter(s)?
 					//TODO differentiation of used parameter vs. receiver?
-					v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
+					resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName)
+					v.resultsSet[resStr] = struct{}{}
 					v.errsFound = true
 				}
 			}
@@ -119,6 +146,7 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 			// stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
 
 			//TODO - needed?
+			assigned := false
 			for index, right := range s.Rhs {
 				funcLit, ok := right.(*ast.FuncLit)
 				if !ok {
@@ -126,9 +154,17 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 				}
 				funcName, ok := s.Lhs[index].(*ast.Ident)
 				if !ok {
-					log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@2 wat")
+					//TODO - understand this case a little more
+					// log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@2 wat")
+					continue
 				}
 				v.handleFuncLit(funcLit, funcName)
+				assigned = true
+			}
+
+			if !assigned {
+				stmtList = v.handleExprs(paramMap, s.Lhs, stmtList)
+				stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
 			}
 
 		case *ast.BlockStmt:
@@ -264,7 +300,8 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			exprList = append(exprList, e.Low, e.High, e.Max, e.X)
 
 		case *ast.StarExpr:
-			// nothing to do here, this is a type (i.e. name will be "int")
+			// need to dig deeper to see if this is a derefenced type
+			exprList = append(exprList, e.X)
 
 		case *ast.TypeAssertExpr:
 			exprList = append(exprList, e.X, e.Type)
@@ -392,7 +429,8 @@ func (v *unusedVisitor) handleFuncLit(funcLit *ast.FuncLit, funcName *ast.Ident)
 			if !used && paramName != "_" {
 				//TODO: this append currently causes things to appear out of order (2)
 				file := v.fileSet.File(funcLit.Pos())
-				v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName))
+				resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName)
+				v.resultsSet[resStr] = struct{}{}
 			}
 		}
 	}
