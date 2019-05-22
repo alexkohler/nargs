@@ -41,6 +41,15 @@ var z = func(i int) {
 	fmt.Println()
 }
 
+func variableCaptuedByClosure(r int) {
+	// note that both r and n ARE used here
+	feedTokens := func(n int) error {
+		n = r
+		return nil
+	}
+	feedTokens(5)
+}
+
 // Unsupported:
 var usedAsGlobalInterfaceMapValue = map[string]interface{}{
 	"someFunc": func(i int, s string) {

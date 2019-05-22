@@ -51,23 +51,29 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 		resultsSet:          make(map[string]struct{}),
 	}
 
+	// visitorResult contains the results for a specific visitor and is cleared on each
+	// iteration
+	var visitorResult []string
 	for _, f := range files {
 		if f == nil {
 			continue
 		}
 		ast.Walk(retVis, f)
+		for result, _ := range retVis.resultsSet {
+			visitorResult = append(visitorResult, result)
+		}
+		// Due to our analysis, of the ast.File, we may end up getting our results out of order. Sort by line number to keep
+		// the results in a consistent format.
+		sort.Sort(byLineNumber(visitorResult))
+		results = append(results, visitorResult...)
+		visitorResult = nil
+		retVis.resultsSet = make(map[string]struct{})
 	}
-
-	results = make([]string, 0, len(retVis.resultsSet))
-	for result, _ := range retVis.resultsSet {
-		results = append(results, result)
-	}
-	sort.Sort(byLineNumber(results))
 
 	return results, retVis.errsFound && flags.SetExitStatus, nil
 }
 
-// Not proud of this, please look away :)
+// ugly, but not sure if there's another option..
 type byLineNumber []string
 
 func (a byLineNumber) Len() int { return len(a) }
@@ -94,10 +100,14 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	switch topLevelType := node.(type) {
 	case *ast.FuncDecl:
 		funcDecl = topLevelType
+		if funcDecl.Body == nil {
+			// This means funcDecl is an external (non-Go) function, these
+			// should not be included in the analysis
+			return v
+		}
 		stmtList = v.handleFuncDecl(paramMap, funcDecl, stmtList)
 		file = v.fileSet.File(funcDecl.Pos())
 
-		//TODO - revisit var func case
 	case *ast.File:
 		file = v.fileSet.File(topLevelType.Pos())
 		if topLevelType.Decls != nil {
@@ -141,11 +151,6 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Cond}, stmtList)
 
 		case *ast.AssignStmt:
-			//TODO see if variables on LHS are used? i.e. add them to param map?
-			// stmtList = v.handleExprs(paramMap, s.Lhs, stmtList)
-			// stmtList = v.handleExprs(paramMap, s.Rhs, stmtList)
-
-			//TODO - needed?
 			assigned := false
 			for index, right := range s.Rhs {
 				funcLit, ok := right.(*ast.FuncLit)
@@ -158,7 +163,7 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 					// log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@2 wat")
 					continue
 				}
-				v.handleFuncLit(funcLit, funcName)
+				v.handleFuncLit(paramMap, funcLit, funcName)
 				assigned = true
 			}
 
@@ -336,7 +341,7 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			exprList = append(exprList, e.Key, e.Value)
 
 		case *ast.StructType:
-			//TODO: no-op,  unless it contains funcs I guess, revisit this
+			//TODO: no-op,  unless it contains funcs I guess? revisit this
 			// exprList, stmtList = handleFieldList(paramMap, e.Fields, exprList, stmtList)
 
 		case *ast.Ellipsis:
@@ -386,7 +391,7 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 						funcName := specType.Names[index]
 						// get arguments of function, this is a candidate
 						// with potentially unused arguments
-						v.handleFuncLit(funcLit, funcName)
+						v.handleFuncLit(paramMap, funcLit, funcName)
 					}
 
 				case *ast.TypeSpec:
@@ -409,7 +414,9 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 	return initialStmts
 }
 
-func (v *unusedVisitor) handleFuncLit(funcLit *ast.FuncLit, funcName *ast.Ident) {
+// paramMap is passed in for cases where we have an outer function with a parameter
+// that is captured by closure by the function literal
+func (v *unusedVisitor) handleFuncLit(paramMap map[string]bool, funcLit *ast.FuncLit, funcName *ast.Ident) {
 	if funcLit.Type != nil && funcLit.Type.Params != nil && len(funcLit.Type.Params.List) > 0 {
 		// declare a separate parameter map for handling
 
@@ -424,6 +431,7 @@ func (v *unusedVisitor) handleFuncLit(funcLit *ast.FuncLit, funcName *ast.Ident)
 
 		// generate potential statements
 		v.handleStmts(funcParamMap, []ast.Stmt{funcLit.Body})
+		v.handleStmts(paramMap, []ast.Stmt{funcLit.Body})
 
 		for paramName, used := range funcParamMap {
 			if !used && paramName != "_" {
