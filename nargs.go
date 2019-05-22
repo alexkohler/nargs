@@ -189,6 +189,8 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 			stmtList = v.handleExprs(paramMap, []ast.Expr{s.X}, stmtList)
 
 		case *ast.ForStmt:
+			stmtList = append(stmtList, s.Init)
+
 			stmtList = append(stmtList, s.Body)
 			stmtList = v.handleExprs(paramMap, []ast.Expr{s.Cond}, stmtList)
 

@@ -50,6 +50,12 @@ func variableCaptuedByClosure(r int) {
 	feedTokens(5)
 }
 
+func writeLines(line0, line1 int) {
+	for i := line0; i < line1; i++ {
+		fmt.Println("lol")
+	}
+}
+
 // Unsupported:
 var usedAsGlobalInterfaceMapValue = map[string]interface{}{
 	"someFunc": func(i int, s string) {
