@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"go/types"
 	"log"
-	"sync"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -16,7 +15,7 @@ func init() {
 	build.Default.UseAllFiles = true
 }
 
-//TODO - should look for callexpr without assign statement then check the returns?
+//TODO - should look for exprstmt then check the returns?
 
 // Flags contains configuration specific to nargs
 // * IncludeTests - include test files in analysis
@@ -64,47 +63,49 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 		includeReceivers:    flags.IncludeReceivers,
 	}
 
-	var wg sync.WaitGroup
+	// var wg sync.WaitGroup
 	for _, pkg := range pkgs {
-		wg.Add(1)
-
-		go func(pkg *packages.Package) {
-			defer wg.Done()
+		if pkg.Name == "nargs" {
+			// go func(pkg *packages.Package) {
+			// defer wg.Done()
 			log.Printf("Checking %s\n", pkg.Types.Path())
 			retVis.pkg = pkg
 
 			for _, astFile := range pkg.Syntax {
 				ast.Walk(retVis, astFile)
 			}
-		}(pkg)
-		wg.Wait()
+			// }(pkg)
+		}
 	}
 
 	return retVis.results, retVis.errsFound && flags.SetExitStatus, nil
 }
 
-func (v *unusedVisitor) errorsByArg(call *ast.CallExpr) {
+func (v *unusedVisitor) hasVoidReturn(call *ast.CallExpr) (ret bool) {
 	if call == nil {
-		return
+		return true
 	}
 	if v.pkg == nil || v.pkg.TypesInfo == nil {
-		return
+		return true
 	}
 	if _, ok := v.pkg.TypesInfo.Types[call]; !ok {
-		return
+		return true
 	}
-	fmt.Printf("checking out %+v: ", call.Fun)
-	switch v.pkg.TypesInfo.Types[call].Type.(type) {
+	defer func() { fmt.Printf("checking out %+v: %v\n", call.Fun, ret) }()
+	switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
 	case *types.Named:
-		fmt.Printf("sangle dangle\n")
+		// fmt.Printf("sangle dangle\n")
 	case *types.Pointer:
-		fmt.Printf("sangle dangle 2\n")
+		// fmt.Printf("sangle dangle 2\n")
 	case *types.Tuple:
-		fmt.Printf("tuple\n")
+		fmt.Printf("length %v\n", t.Len())
+		return t.Len() == 0
+	case *types.Slice:
 	default:
-		fmt.Printf("defaaa\n")
-
+		// fmt.Printf("defaa %Ta\n", t)
 	}
+
+	return false
 	// switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
 	// case *types.Named:
 	// 	// Single return
@@ -185,6 +186,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
+
 		stmt := funcDecl.Body.List[0]
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
@@ -226,7 +228,19 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 			}
 
 		case *ast.ExprStmt:
-			funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
+			callExpr, ok := s.X.(*ast.CallExpr)
+			if ok {
+				iden, ok := callExpr.Fun.(*ast.Ident)
+				if ok {
+					// fmt.Print("wat's going on?\n")
+					if !v.hasVoidReturn(callExpr) {
+						fmt.Printf("pin it bud %v\n", iden.Name)
+					}
+				}
+
+			}
+
+			// funcDecl.Body.List = v.handleExprs(paramMap, []ast.Expr{s.X}, funcDecl.Body.List)
 
 		case *ast.RangeStmt:
 			funcDecl.Body.List = append(funcDecl.Body.List, s.Body)
@@ -302,7 +316,9 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	return v
 }
 
+func nilFunc() int { return 1 }
 func handleIdents(paramMap map[string]bool, identList []*ast.Ident) {
+	nilFunc()
 	for _, ident := range identList {
 		handleIdent(paramMap, ident)
 	}
@@ -342,7 +358,7 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 
 		case *ast.CallExpr:
 			// fmt.Println("got some call exprs :))))")
-			v.errorsByArg(e)
+			// v.errorsByArg(e)
 			exprList = append(exprList, e.Args...)
 			exprList = append(exprList, e.Fun)
 
