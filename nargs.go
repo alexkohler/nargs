@@ -44,8 +44,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 	// We'll probably only want to accept packges.
 
 	//TODO wire in slice for go list -f '{{ .Imports }}' github.com/alexkohler/nargs
-
-	pkgsStr := []string{"github.com/alexkohler/nargs", "fmt", "go/ast", "go/build", "go/parser", "go/token", "go/types", "golang.org/x/tools/go/packages", "log", "os", "path", "path/filepath", "regexp", "runtime", "strings"}
+	pkgsStr := []string{"github.com/alexkohler/nargs/testdata", "fmt", "go/ast", "go/build", "go/parser", "go/token", "go/types", "golang.org/x/tools/go/packages", "log", "os", "path", "path/filepath", "regexp", "runtime", "strings"}
 
 	cfg := &packages.Config{
 		Mode:  packages.LoadAllSyntax,
@@ -65,13 +64,13 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 
 	// var wg sync.WaitGroup
 	for _, pkg := range pkgs {
-		if pkg.Name == "nargs" {
+		if pkg.Name == "main" {
 			// go func(pkg *packages.Package) {
 			// defer wg.Done()
 			log.Printf("Checking %s\n", pkg.Types.Path())
 			retVis.pkg = pkg
-
 			for _, astFile := range pkg.Syntax {
+				fmt.Printf("looking at file %v\n", astFile.Name.Name)
 				ast.Walk(retVis, astFile)
 			}
 			// }(pkg)
@@ -135,7 +134,6 @@ func (v *unusedVisitor) hasVoidReturn(call *ast.CallExpr) (ret bool) {
 
 // Visit implements the ast.Visitor Visit method.
 func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
-
 	// search for call expressions
 	funcDecl, ok := node.(*ast.FuncDecl)
 	if !ok {
@@ -144,41 +142,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	paramMap := make(map[string]bool)
 
-	if funcDecl.Type != nil {
-		if funcDecl.Type.Params != nil {
-			for _, paramList := range funcDecl.Type.Params.List {
-				for _, name := range paramList.Names {
-					if name.Name == "_" {
-						continue
-					}
-					paramMap[name.Name] = false
-				}
-			}
-		}
-
-		if v.includeNamedReturns && funcDecl.Type.Results != nil {
-			for _, paramList := range funcDecl.Type.Results.List {
-				for _, name := range paramList.Names {
-					if name.Name == "_" {
-						continue
-					}
-					paramMap[name.Name] = false
-				}
-			}
-		}
-	}
-
-	if v.includeReceivers && funcDecl.Recv != nil {
-		for _, field := range funcDecl.Recv.List {
-			for _, name := range field.Names {
-				if name.Name == "_" {
-					continue
-				}
-				paramMap[name.Name] = false
-			}
-		}
-	}
-
 	// We cannot exit if len(paramMap) == 0, we may have a function closure with
 	// unused variables
 
@@ -186,7 +149,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
-
+		fmt.Printf("exploring %v\n", funcDecl.Name.Name)
 		stmt := funcDecl.Body.List[0]
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
@@ -230,11 +193,20 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		case *ast.ExprStmt:
 			callExpr, ok := s.X.(*ast.CallExpr)
 			if ok {
-				iden, ok := callExpr.Fun.(*ast.Ident)
-				if ok {
+				switch c := callExpr.Fun.(type) {
+				case *ast.Ident:
 					// fmt.Print("wat's going on?\n")
 					if !v.hasVoidReturn(callExpr) {
-						fmt.Printf("pin it bud %v\n", iden.Name)
+						fmt.Printf("pin it bud %v\n", c.Name)
+					}
+				case *ast.SelectorExpr:
+					x, ok := c.X.(*ast.Ident)
+					if !ok {
+						fmt.Println("kate mccannon")
+						continue
+					}
+					if !v.hasVoidReturn(callExpr) {
+						fmt.Printf("pin it bud %v.%v\n", x.Name, c.Sel.Name)
 					}
 				}
 
