@@ -27,17 +27,17 @@ func funcFour() (namedReturn int) {
 }
 
 func closure() {
-	c := func(v int) {
+	c := func(v int) { // unused function parameter 'v'
 		enclosed := 2
 		enclosed++
 	}
 	c(1)
 }
 
-func unusedFunc(f func()) {
+func unusedFunc(f func()) { // f is unused
 }
 
-var z = func(i int) {
+var z = func(i int) { // i is unused
 	fmt.Println()
 }
 
@@ -57,6 +57,10 @@ func writeLines(line0, line1 int) {
 }
 
 // Unsupported:
+type s struct {
+	f func()
+}
+
 var usedAsGlobalInterfaceMapValue = map[string]interface{}{
 	"someFunc": func(i int, s string) {
 		if i == 0 {
