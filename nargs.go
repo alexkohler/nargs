@@ -1,12 +1,15 @@
 package nargs
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/build"
 	"go/token"
 	"go/types"
 	"log"
+	"os/exec"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -40,11 +43,33 @@ type unusedVisitor struct {
 
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
 // and walk the AST searching for unused function parameters.
-func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, exitWithStatus bool, _ error) {
-	// We'll probably only want to accept packges.
+func CheckForUnusedFunctionArgs(inputPkgs []string, flags Flags) (results []string, exitWithStatus bool, _ error) {
+	//TODO can probably use parseInput and grab the package for each file if need be,
+	// but we can revisit that later
 
-	//TODO wire in slice for go list -f '{{ .Imports }}' github.com/alexkohler/nargs
-	pkgsStr := []string{"github.com/alexkohler/nargs/testdata", "fmt", "go/ast", "go/build", "go/parser", "go/token", "go/types", "golang.org/x/tools/go/packages", "log", "os", "path", "path/filepath", "regexp", "runtime", "strings"}
+	// We'll probably only want to accept packges.
+	if len(inputPkgs) > 1 {
+		panic("only a single package is supported at this time")
+	}
+	fmt.Printf("running on package %v\n", inputPkgs[0])
+	var outbuf, errbuf bytes.Buffer
+	cmd := exec.Command("go", "list", "-f", "'{{ join .Imports \" \" }}'")
+	cmd.Stdout = &outbuf
+	cmd.Stderr = &errbuf
+
+	err := cmd.Run()
+	if err != nil {
+		panic(err)
+	}
+	stdout := outbuf.String()
+
+	fmt.Println(stdout)
+	dependentPackages := strings.Split(stdout, " ")
+	fmt.Println(dependentPackages)
+	// generate depedent packages
+	var pkgsStr []string
+	pkgsStr = append(pkgsStr, inputPkgs...)
+	pkgsStr = append(pkgsStr, dependentPackages...)
 
 	cfg := &packages.Config{
 		Mode:  packages.LoadAllSyntax,
@@ -63,8 +88,9 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 	}
 
 	// var wg sync.WaitGroup
+	fmt.Printf("looking for %v\n", inputPkgs[0])
 	for _, pkg := range pkgs {
-		if pkg.Name == "main" {
+		if pkg.Name == inputPkgs[0] {
 			// go func(pkg *packages.Package) {
 			// defer wg.Done()
 			log.Printf("Checking %s\n", pkg.Types.Path())
@@ -90,14 +116,13 @@ func (v *unusedVisitor) hasVoidReturn(call *ast.CallExpr) (ret bool) {
 	if _, ok := v.pkg.TypesInfo.Types[call]; !ok {
 		return true
 	}
-	defer func() { fmt.Printf("checking out %+v: %v\n", call.Fun, ret) }()
+	// defer func() { fmt.Printf("checking out %+v: %v\n", call.Fun, ret) }()
 	switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
 	case *types.Named:
 		// fmt.Printf("sangle dangle\n")
 	case *types.Pointer:
 		// fmt.Printf("sangle dangle 2\n")
 	case *types.Tuple:
-		fmt.Printf("length %v\n", t.Len())
 		return t.Len() == 0
 	case *types.Slice:
 	default:
@@ -149,7 +174,7 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
-		fmt.Printf("exploring %v\n", funcDecl.Name.Name)
+		// fmt.Printf("exploring %v\n", funcDecl.Name.Name)
 		stmt := funcDecl.Body.List[0]
 		switch s := stmt.(type) {
 		case *ast.IfStmt:
