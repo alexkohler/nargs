@@ -56,11 +56,6 @@ func writeLines(line0, line1 int) {
 	}
 }
 
-// Unsupported:
-type s struct {
-	f func()
-}
-
 var usedAsGlobalInterfaceMapValue = map[string]interface{}{
 	"someFunc": func(i int, s string) {
 		if i == 0 {
