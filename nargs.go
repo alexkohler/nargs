@@ -33,7 +33,7 @@ type Flags struct {
 }
 
 type unusedVisitor struct {
-	f                   *token.FileSet
+	fileSet             *token.FileSet
 	pkg                 *packages.Package
 	results             []string
 	includeNamedReturns bool
@@ -44,33 +44,53 @@ type unusedVisitor struct {
 // CheckForUnusedFunctionArgs will parse the files/packages contained in args
 // and walk the AST searching for unused function parameters.
 func CheckForUnusedFunctionArgs(inputPkgs []string, flags Flags) (results []string, exitWithStatus bool, _ error) {
-	//TODO can probably use parseInput and grab the package for each file if need be,
-	// but we can revisit that later
+	var pkgsStr []string
+	inputPkgSet := make(map[string]struct{})
+	pkgsStr = append(pkgsStr, inputPkgs...)
 
 	// We'll probably only want to accept packges.
-	if len(inputPkgs) > 1 {
-		panic("only a single package is supported at this time")
-	}
-	fmt.Printf("running on package %v\n", inputPkgs[0])
-	var outbuf, errbuf bytes.Buffer
-	cmd := exec.Command("go", "list", "-f", "'{{ join .Imports \" \" }}'")
-	cmd.Stdout = &outbuf
-	cmd.Stderr = &errbuf
+	for _, inputPkg := range inputPkgs {
+		fmt.Printf("running on package %v\n", inputPkgs[0])
+		var outbuf, errbuf bytes.Buffer
 
-	err := cmd.Run()
-	if err != nil {
-		panic(err)
-	}
-	stdout := outbuf.String()
+		// dependent packages
+		cmd := exec.Command("go", "list", "-f", "'{{ join .Imports \" \" }}'", inputPkg)
 
-	fmt.Println(stdout)
-	dependentPackages := strings.Split(stdout, " ")
-	fmt.Println(dependentPackages)
+		inputPkgSet[strings.TrimRight(inputPkg, "/...")] = struct{}{}
+
+		cmd.Stdout = &outbuf
+		cmd.Stderr = &errbuf
+
+		err := cmd.Run()
+		if err != nil {
+			return nil, false, err
+		}
+		stdout := outbuf.String()
+
+		dependentPackages := strings.Split(stdout, " ")
+		pkgsStr = append(pkgsStr, dependentPackages...)
+
+		// If <package name>/...
+		if strings.HasSuffix(inputPkg, "/...") {
+			fmt.Printf("input pkg %v has suffix\n", inputPkg)
+			var firstClassOutBuf, firstClassErrBuf bytes.Buffer
+
+			// get other "first class" packages we wish to analyze
+			cmd := exec.Command("go", "list", inputPkg)
+			cmd.Stdout = &firstClassOutBuf
+			cmd.Stderr = &firstClassErrBuf
+
+			if err := cmd.Run(); err != nil {
+				return nil, false, err
+			}
+			firstClassList := strings.Split(firstClassOutBuf.String(), "\n")
+			for _, firstClassPkg := range firstClassList {
+				inputPkgSet[firstClassPkg] = struct{}{}
+			}
+		}
+	}
+
 	// generate depedent packages
-	var pkgsStr []string
-	pkgsStr = append(pkgsStr, inputPkgs...)
-	pkgsStr = append(pkgsStr, dependentPackages...)
-
 	cfg := &packages.Config{
 		Mode:  packages.LoadAllSyntax,
 		Tests: false,
@@ -79,27 +99,23 @@ func CheckForUnusedFunctionArgs(inputPkgs []string, flags Flags) (results []stri
 
 	pkgs, err := packages.Load(cfg, pkgsStr...)
 	if err != nil {
-		panic(err)
+		return nil, false, err
 	}
 
 	retVis := &unusedVisitor{
 		includeNamedReturns: flags.IncludeNamedReturns,
 		includeReceivers:    flags.IncludeReceivers,
+		fileSet:             token.NewFileSet(),
 	}
 
-	// var wg sync.WaitGroup
-	fmt.Printf("looking for %v\n", inputPkgs[0])
+	//TODO goroutines here?
 	for _, pkg := range pkgs {
-		if pkg.Name == inputPkgs[0] {
-			// go func(pkg *packages.Package) {
-			// defer wg.Done()
+		if _, ok := inputPkgSet[pkg.PkgPath]; ok {
 			log.Printf("Checking %s\n", pkg.Types.Path())
 			retVis.pkg = pkg
 			for _, astFile := range pkg.Syntax {
-				fmt.Printf("looking at file %v\n", astFile.Name.Name)
 				ast.Walk(retVis, astFile)
 			}
-			// }(pkg)
 		}
 	}
 
@@ -116,45 +132,19 @@ func (v *unusedVisitor) hasVoidReturn(call *ast.CallExpr) (ret bool) {
 	if _, ok := v.pkg.TypesInfo.Types[call]; !ok {
 		return true
 	}
-	// defer func() { fmt.Printf("checking out %+v: %v\n", call.Fun, ret) }()
+	//TODO - return parameter as well?
 	switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
-	case *types.Named:
-		// fmt.Printf("sangle dangle\n")
-	case *types.Pointer:
-		// fmt.Printf("sangle dangle 2\n")
+	// case *types.Named:
+	// fmt.Printf("sangle dangle\n")
+	// case *types.Pointer:
+	// fmt.Printf("sangle dangle 2\n")
 	case *types.Tuple:
 		return t.Len() == 0
-	case *types.Slice:
+	// case *types.Slice:
 	default:
 		// fmt.Printf("defaa %Ta\n", t)
+		return false
 	}
-
-	return false
-	// switch t := v.pkg.TypesInfo.Types[call].Type.(type) {
-	// case *types.Named:
-	// 	// Single return
-	// 	return []bool{isErrorType(t)}
-	// case *types.Pointer:
-	// 	// Single return via pointer
-	// 	return []bool{isErrorType(t)}
-	// case *types.Tuple:
-	// 	// Multiple returns
-	// 	s := make([]bool, t.Len())
-	// 	for i := 0; i < t.Len(); i++ {
-	// 		switch et := t.At(i).Type().(type) {
-	// 		case *types.Named:
-	// 			// Single return
-	// 			s[i] = isErrorType(et)
-	// 		case *types.Pointer:
-	// 			// Single return via pointer
-	// 			s[i] = isErrorType(et)
-	// 		default:
-	// 			s[i] = false
-	// 		}
-	// 	}
-	// 	return s
-	// }
-	// return []bool{false}
 }
 
 // Visit implements the ast.Visitor Visit method.
@@ -166,11 +156,6 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	}
 
 	paramMap := make(map[string]bool)
-
-	// We cannot exit if len(paramMap) == 0, we may have a function closure with
-	// unused variables
-
-	// file := v.f.File(funcDecl.Pos())
 
 	// Analyze body of function
 	for funcDecl.Body != nil && len(funcDecl.Body.List) != 0 {
@@ -222,16 +207,22 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 				case *ast.Ident:
 					// fmt.Print("wat's going on?\n")
 					if !v.hasVoidReturn(callExpr) {
-						fmt.Printf("pin it bud %v\n", c.Name)
+						file := v.pkg.Fset.File(c.Pos())
+						fmt.Printf("%v:%v unchecked returns on method %v\n", file.Name(), file.Position(callExpr.Pos()).Line, c.Name)
 					}
 				case *ast.SelectorExpr:
 					x, ok := c.X.(*ast.Ident)
 					if !ok {
-						fmt.Println("kate mccannon")
+						// file := v.fileSet.File(c.X.Pos())
+						// fmt.Printf("%v:%v %v kinkossssss\n", file.Name(), file.Line)
+						// fmt.Printf("kate mccannon %T\n", c.X)
+						//TODO - understand this
+						funcDecl.Body.List = funcDecl.Body.List[1:]
 						continue
 					}
 					if !v.hasVoidReturn(callExpr) {
-						fmt.Printf("pin it bud %v.%v\n", x.Name, c.Sel.Name)
+						file := v.pkg.Fset.File(c.Pos())
+						fmt.Printf("%v:%v unchecked returns on method %v.%v\n", file.Name(), file.Position(callExpr.Pos()).Line, x.Name, c.Sel.Name)
 					}
 				}
 
@@ -297,25 +288,10 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		funcDecl.Body.List = funcDecl.Body.List[1:]
 	}
 
-	// for funcName, used := range paramMap {
-	// 	if !used {
-	// 		if file != nil {
-	// 			if funcDecl.Name != nil {
-	// 				//TODO print parameter vs parameter(s)?
-	// 				//TODO differentiation of used parameter vs. receiver?
-	// 				v.results = append(v.results, fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, funcName))
-	// 				v.errsFound = true
-	// 			}
-	// 		}
-	// 	}
-	// }
-
 	return v
 }
 
-func nilFunc() int { return 1 }
 func handleIdents(paramMap map[string]bool, identList []*ast.Ident) {
-	nilFunc()
 	for _, ident := range identList {
 		handleIdent(paramMap, ident)
 	}
