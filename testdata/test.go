@@ -53,10 +53,11 @@ func variableCapturedByClosure(r int) {
 	feedTokens(5)
 }
 
-var usedAsGlobalInterfaceMapValue = map[string]interface{}{
-	"someFunc": func(i int, s string) { //TODO - functions as keys
-		if i == 0 {
-			println()
-		}
-	},
-}
+//TODO - functions as keys
+// var usedAsGlobalInterfaceMapValue = map[string]interface{}{
+// 	"someFunc": func(i int, s string) {
+// 		if i == 0 {
+// 			println()
+// 		}
+// 	},
+// }
