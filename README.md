@@ -1,6 +1,6 @@
 # nargs
 
-nargs is a Go static analysis tool to find unused arguments in function declarations. Unlike the [unparam](https://github.com/mvdan/unparam) linter, this linter is aggressive by design and may have false positives (see the Examples/FAQ below for more info).
+nargs is a Go static analysis tool to find unused arguments in function declarations. Unlike the [unparam](https://github.com/mvdan/unparam) linter, this linter is aggressive by design and may have false positives (see the Examples/FAQ below for more info).       
 
 ## Installation
 
@@ -73,10 +73,10 @@ var closureTwo = func(i int) {
 ```Bash
 $ $ nargs testdata/test.go 
 testdata/test.go:6 funcOne contains unused parameter c
-testdata/test.go:13 funcTwo contains unused parameter c
-testdata/test.go:31 c contains unused parameter v
+testdata/test.go:13 funcTwo contains unused parameter z
+testdata/test.go:31 closureOne contains unused parameter v
 testdata/test.go:39 unusedFunc contains unused parameter f
-testdata/test.go:43 z contains unused parameter i
+testdata/test.go:43 closureTwo contains unused parameter i
 ```
 
 ## FAQ
@@ -87,8 +87,8 @@ testdata/test.go:43 z contains unused parameter i
 * `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implementing an interface. 
 
 ```Bash
-$ unparam test.go 
-test.go:5:28: c is unused
+$ unparam testdata/test.go 
+testdata/test.go:6:28: c is unused
 ```
 
 
