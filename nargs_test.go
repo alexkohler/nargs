@@ -41,7 +41,7 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 			},
 			wantResults: []string{
 				"testdata/test.go:6 funcOne contains unused parameter c\n",
-				"testdata/test.go:13 funcTwo contains unused parameter c\n",
+				"testdata/test.go:13 funcTwo contains unused parameter z\n",
 				"testdata/test.go:31 closureOne contains unused parameter v\n",
 				"testdata/test.go:39 unusedFunc contains unused parameter f\n",
 				"testdata/test.go:43 closureTwo contains unused parameter i\n",
@@ -61,7 +61,7 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 			},
 			wantResults: []string{
 				"testdata/test.go:6 funcOne contains unused parameter c\n",
-				"testdata/test.go:13 funcTwo contains unused parameter c\n",
+				"testdata/test.go:13 funcTwo contains unused parameter z\n",
 				"testdata/test.go:19 funcThree contains unused parameter recv\n",
 				"testdata/test.go:25 funcFour contains unused parameter namedReturn\n",
 				"testdata/test.go:31 closureOne contains unused parameter v\n",
