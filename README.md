@@ -21,7 +21,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 
 ## Purpose
 
-Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is intentionally not used.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is intentionally not used. It's worth noting that this linter is aggressive by design and may have false positives.
 
 ## Examples
 
@@ -83,7 +83,7 @@ testdata/test.go:43 z contains unused parameter i
 
 ### How is this different than [unparam](https://github.com/mvdan/unparam)?
 
-By design, `unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implmenting an interface.
+By design, `unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface or function typedef, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implementing an interface. 
 
 ```Bash
 $ unparam test.go 
@@ -93,29 +93,17 @@ test.go:5:28: c is unused
 
 ### How should these issues be fixed?
 
-If the function is implementing an interface or function typedef, the blank identifier `_` should be used and `nargs` will no longer flag the parameter as being unused. In other cases, the arguments can simply be removed. Suppose all the functions from our example above were implementing an interface or function typedef. Then, the following can be done to fix the above example:
+If the function is implementing an interface or function typedef, the blank identifier `_` should be used and `nargs` will no longer flag the parameter as being unused. In other cases, the arguments can simply be removed. Suppose funcOne from our example above could not be removed due to meeting a function typedef. In this case, the following can be done to fix the above example:
 
 ```Go
 package main
 
+// testdata/test.go:6 funcOne contains unused parameter c - use '_' on the 'c' parameter
 func funcOne(a int, b int, _ int) int {
         return a + b
 }
-
-type f struct{}
-
-func (f) funcTwo(a int, b int, _ int) int {
-        return a + b
-}
-
-func (f) funcThree(_ int) int {
-        return 5
-}
-
-func funcFour() (namedReturn int) {
-        return
-}
 ```
+
 
 ## Other static analysis tools
 
