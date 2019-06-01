@@ -21,7 +21,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 
 ## Purpose
 
-Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier "_" to indicate that the parameter is intentionally not used. It's worth noting that this linter is aggressive by design and may have false positives.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier `_` to indicate that the parameter is intentionally not used. It's worth noting that this linter is aggressive by design and may have false positives.
 
 ## Examples
 
