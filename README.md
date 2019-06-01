@@ -94,7 +94,7 @@ testdata/test.go:6:28: c is unused
 
 ### How should these issues be fixed?
 
-If the function is implementing an interface or function typedef, the blank identifier `_` should be used and `nargs` will no longer flag the parameter as being unused. In other cases, the arguments can simply be removed. Suppose funcOne from our example above could not be removed due to meeting a function typedef. In this case, the following can be done to fix the above example:
+If the function is implementing an interface or function typedef, the blank identifier `_` should be used and `nargs` will no longer flag the parameter as being unused. In other cases, the arguments can simply be removed. Suppose `funcOne` from our example above could not be removed due to meeting a function typedef. In this case, the following can be done to fix the above example:
 
 ```Go
 package main
