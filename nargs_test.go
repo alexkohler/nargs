@@ -8,7 +8,7 @@ import (
 func TestCheckForUnusedFunctionArgs(t *testing.T) {
 	defaultFlags := Flags{
 		IncludeNamedReturns: false,
-		IncludeReceivers:    true,
+		IncludeReceivers:    false,
 		IncludeTests:        true,
 		SetExitStatus:       true,
 	}
@@ -42,10 +42,9 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 			wantResults: []string{
 				"testdata/test.go:6 funcOne contains unused parameter c\n",
 				"testdata/test.go:13 funcTwo contains unused parameter c\n",
-				"testdata/test.go:19 funcThree contains unused parameter recv\n",
-				"testdata/test.go:30 c contains unused parameter v\n",
-				"testdata/test.go:37 unusedFunc contains unused parameter f\n",
-				"testdata/test.go:40 z contains unused parameter i\n",
+				"testdata/test.go:31 c contains unused parameter v\n",
+				"testdata/test.go:39 unusedFunc contains unused parameter f\n",
+				"testdata/test.go:43 z contains unused parameter i\n",
 			},
 			wantExitWithStatus: true,
 			wantErr:            false,
@@ -65,9 +64,9 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 				"testdata/test.go:13 funcTwo contains unused parameter c\n",
 				"testdata/test.go:19 funcThree contains unused parameter recv\n",
 				"testdata/test.go:25 funcFour contains unused parameter namedReturn\n",
-				"testdata/test.go:30 c contains unused parameter v\n",
-				"testdata/test.go:37 unusedFunc contains unused parameter f\n",
-				"testdata/test.go:40 z contains unused parameter i\n",
+				"testdata/test.go:31 c contains unused parameter v\n",
+				"testdata/test.go:39 unusedFunc contains unused parameter f\n",
+				"testdata/test.go:43 z contains unused parameter i\n",
 			},
 			wantExitWithStatus: true,
 			wantErr:            false,

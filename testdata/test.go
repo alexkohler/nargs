@@ -14,8 +14,8 @@ func (f) funcTwo(a int, b int, c int) int {
 	return a + b
 }
 
-// Unused function receiver. Unused receivers are flagged by default. Flagging unused function receivers
-// can be disabled by setting the -receivers flag to false.
+// Unused function receiver. Unused receivers are NOT flagged by default. Flagging unused function receivers
+// can be enabled by setting the -receivers flag to true.
 func (recv f) funcThree() int {
 	return 5
 }
@@ -26,22 +26,25 @@ func funcFour() (namedReturn int) {
 	return
 }
 
+// Unused closure parameters inside function
 func closure() {
-	c := func(v int) { // unused function parameter 'v'
+	c := func(v int) {
 		enclosed := 2
 		enclosed++
 	}
 	c(1)
 }
 
-func unusedFunc(f func()) { // f is unused
+// Unused function as parameter
+func unusedFunc(f func()) {
 }
 
-var z = func(i int) { // i is unused
+// Unused closure parameter in package scoped closure
+var z = func(i int) {
 	fmt.Println()
 }
 
-func variableCaptuedByClosure(r int) {
+func variableCapturedByClosure(r int) {
 	// note that both r and n ARE used here
 	feedTokens := func(n int) error {
 		n = r
@@ -50,14 +53,8 @@ func variableCaptuedByClosure(r int) {
 	feedTokens(5)
 }
 
-func writeLines(line0, line1 int) {
-	for i := line0; i < line1; i++ {
-		fmt.Println("lol")
-	}
-}
-
 var usedAsGlobalInterfaceMapValue = map[string]interface{}{
-	"someFunc": func(i int, s string) {
+	"someFunc": func(i int, s string) { //TODO - functions as keys
 		if i == 0 {
 			println()
 		}
