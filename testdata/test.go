@@ -10,8 +10,8 @@ func funcOne(a int, b int, c int) int {
 // Unused function parameter on method with receiver
 type f struct{}
 
-func (f) funcTwo(a int, b int, c int) int {
-	return a + b
+func (f) funcTwo(x int, y int, z int) int {
+	return x + y
 }
 
 // Unused function receiver. Unused receivers are NOT flagged by default. Flagging unused function receivers
@@ -32,7 +32,7 @@ func unusedClosureParamInsideFunction() {
 		enclosed := 2
 		enclosed++
 	}
-	c(1)
+	closureOne(1)
 }
 
 // Unused function as parameter
