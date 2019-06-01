@@ -52,8 +52,8 @@ func funcFour() (namedReturn int) {
 }
 
 // Unused closure parameters inside function
-func closure() {
-	c := func(v int) {
+func unusedClosureParamInsideFunction() {
+	closureOne := func(v int) {
 		enclosed := 2
 		enclosed++
 	}
@@ -65,7 +65,7 @@ func unusedFunc(f func()) {
 }
 
 // Unused closure parameter in package scoped closure
-var z = func(i int) {
+var closureTwo = func(i int) {
 	fmt.Println()
 }
 ```
