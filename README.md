@@ -21,7 +21,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 
 ## Purpose
 
-Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier `_` to indicate that the parameter is intentionally not used. It's worth noting that this linter is aggressive by design and may have false positives.
+Often, parameters will be added to functions (such as a constructor), and then not actually used within the function. This tool was written to flag these types of functions to encourage either removing the parameters or using the blank identifier `_` to indicate that the parameter is intentionally not used. Unlike the unparam linter, this linter is aggressive by design and may have false positives (see the FAQ below for more info).
 
 ## Examples
 
@@ -83,7 +83,8 @@ testdata/test.go:43 z contains unused parameter i
 
 ### How is this different than [unparam](https://github.com/mvdan/unparam)?
 
-By design, `unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface or function typedef, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implementing an interface. 
+* By design, `unparam` errs on the safe side to minimize false positives (ignoring functions that potentially satisfy an interface or function typedef, etc.). `nargs` takes a more aggressive approach and encourages the use of the blank identifier `_` for function parameters that are intentionally not used. 
+* `unparam` operates using the [ssa](https://godoc.org/golang.org/x/tools/go/ssa) package, whereas `nargs` uses a purely AST-based approach. Running unparam on the example file above only finds the issue in funcOne. funcTwo and funcThree are ignored due to potentially implementing an interface. 
 
 ```Bash
 $ unparam test.go 
