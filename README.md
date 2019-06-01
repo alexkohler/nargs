@@ -16,7 +16,7 @@ Similar to other Go static anaylsis tools (such as golint, go vet), nargs can be
 - **-tests** (default true) - Include test files in analysis
 - **-set_exit_status** (default true) - Set exit status to 1 if any issues are found.
 - **-named_returns** (default false) - Report unused named return arguments. This is false by default because named returns can be used to provide context to what's being returned.
-- **-receivers** (default true) - Report unused function receivers.
+- **-receivers** (default false) - Report unused function receivers.
 
 
 ## Purpose
@@ -41,8 +41,8 @@ func (f) funcTwo(a int, b int, c int) int {
         return a + b
 }
 
-// Unused function receiver. Unused receivers are flagged by default. Flagging unused function receivers 
-// can be disabled by setting the -receivers flag to false.
+// Unused function receiver. Unused receivers are NOT flagged by default. Flagging unused function receivers 
+// can be enabled by setting the -receivers flag to true.
 func (recv f) funcThree() int {
         return 5
 }
