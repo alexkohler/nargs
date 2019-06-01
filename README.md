@@ -27,39 +27,56 @@ Often, parameters will be added to functions (such as a constructor), and then n
 
 ```Go
 // test.go
-package main
-
 // Unused function parameter on function
 func funcOne(a int, b int, c int) int {
-        return a + b
+	return a + b
 }
 
 // Unused function parameter on method with receiver
 type f struct{}
 
 func (f) funcTwo(a int, b int, c int) int {
-        return a + b
+	return a + b
 }
 
-// Unused function receiver. Unused receivers are NOT flagged by default. Flagging unused function receivers 
+// Unused function receiver. Unused receivers are NOT flagged by default. Flagging unused function receivers
 // can be enabled by setting the -receivers flag to true.
 func (recv f) funcThree() int {
-        return 5
+	return 5
 }
 
-// Unused named returns. Unused named returns are NOT flagged by deault. Flagging unused named returns 
+// Unused named returns. Unused named returns are NOT flagged by deault. Flagging unused named returns
 // can be enabled by setting the -named_returns flag to true.
 func funcFour() (namedReturn int) {
 	return
 }
+
+// Unused closure parameters inside function
+func closure() {
+	c := func(v int) {
+		enclosed := 2
+		enclosed++
+	}
+	c(1)
+}
+
+// Unused function as parameter
+func unusedFunc(f func()) {
+}
+
+// Unused closure parameter in package scoped closure
+var z = func(i int) {
+	fmt.Println()
+}
 ```
 
 ```Bash
-$ nargs -named-returns=true main.go 
-test.go:5 funcOne contains unused parameter c
-test.go:12 funcTwo contains unused parameter c
-test.go:17 funcThree contains unused parameter recv
-test.go:22 funcFour contains unused parameter namedReturn
+$ $ nargs testdata/test.go 
+testdata/test.go:6 funcOne contains unused parameter c
+testdata/test.go:13 funcTwo contains unused parameter c
+testdata/test.go:31 c contains unused parameter v
+testdata/test.go:39 unusedFunc contains unused parameter f
+testdata/test.go:43 z contains unused parameter i
 ```
 
 ## FAQ
