@@ -125,17 +125,24 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 	v.handleStmts(paramMap, stmtList)
 
 	for paramName, used := range paramMap {
-		if !used {
-			if file != nil {
-				if funcDecl != nil && funcDecl.Name != nil {
-					// TODO print parameter vs parameter(s)?
-					// TODO differentiation of used parameter vs. receiver?
-					resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, paramName)
-					v.resultsSet[resStr] = struct{}{}
-					v.errsFound = true
-				}
-			}
+		if used {
+			continue
 		}
+		if file == nil {
+			continue
+		}
+		if funcDecl == nil {
+			continue
+		}
+		if funcDecl.Name == nil {
+			continue
+		}
+
+		// TODO print parameter vs parameter(s)?
+		// TODO differentiation of used parameter vs. receiver?
+		resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, paramName)
+		v.resultsSet[resStr] = struct{}{}
+		v.errsFound = true
 	}
 
 	return v
