@@ -419,7 +419,7 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 // paramMap is passed in for cases where we have an outer function with a parameter
 // that is captured by closure by the function literal
 func (v *unusedVisitor) handleFuncLit(paramMap map[string]bool, funcLit *ast.FuncLit, funcName *ast.Ident) {
-	if funcLit.Type != nil && funcLit.Type.Params != nil && len(funcLit.Type.Params.List) > 0 {
+	if funcLit.Type != nil && funcLit.Type.Params != nil {
 		// declare a separate parameter map for handling
 
 		funcParamMap := make(map[string]bool)
