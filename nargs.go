@@ -29,6 +29,7 @@ type Flags struct {
 
 type unusedVisitor struct {
 	fileSet             *token.FileSet
+	currentFile         *token.File
 	resultsSet          map[string]struct{}
 	includeNamedReturns bool
 	includeReceivers    bool
@@ -106,9 +107,11 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 		stmtList = v.handleFuncDecl(paramMap, funcDecl, stmtList)
 		file = v.fileSet.File(funcDecl.Pos())
+		v.currentFile = file
 
 	case *ast.File:
 		file = v.fileSet.File(topLevelType.Pos())
+		v.currentFile = file
 		if topLevelType.Decls != nil {
 			stmtList = v.handleDecls(paramMap, topLevelType.Decls, stmtList)
 		}
@@ -244,7 +247,7 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 			// no-op
 
 		default:
-			log.Printf("ERROR: unknown stmt type %T\n", s)
+			log.Printf("ERROR: unknown stmt type %T in file %v\n", s, v.currentFile.Name())
 		}
 
 		stmtList = stmtList[1:]
@@ -363,7 +366,7 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			// no op
 
 		default:
-			log.Printf("ERROR: unknown expr type %T\n", e)
+			log.Printf("ERROR: unknown expr type %T in file %v\n", e, v.currentFile.Name())
 		}
 		exprList = exprList[1:]
 	}
