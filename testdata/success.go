@@ -12,3 +12,10 @@ func FuncVars(x int) {
 	}
 	do()
 }
+
+func newTypePair[K any, V any]() {
+}
+
+func testIndexListExpr() {
+	newTypePair[int, int]
+}

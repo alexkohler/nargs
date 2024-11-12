@@ -349,6 +349,10 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 		case *ast.Ellipsis:
 			exprList = append(exprList, e.Elt)
 
+		case *ast.IndexListExpr:
+			exprList = append(exprList, e.X)
+			exprList = append(exprList, e.Indices...)
+
 		case nil:
 			// no op
 
