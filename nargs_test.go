@@ -24,7 +24,8 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 		wantExitWithStatus bool
 		wantErr            bool
 	}{
-		{name: "Success (file with no errors), default flags",
+		{
+			name: "Success (file with no errors), default flags",
 			args: args{
 				cliArgs: []string{"testdata/success.go"},
 				flags:   defaultFlags,
@@ -34,7 +35,8 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 			wantExitWithStatus: false,
 			wantErr:            false,
 		},
-		{name: "File with errors, default flags",
+		{
+			name: "File with errors, default flags",
 			args: args{
 				cliArgs: []string{"testdata/test.go"},
 				flags:   defaultFlags,
@@ -49,7 +51,8 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 			wantExitWithStatus: true,
 			wantErr:            false,
 		},
-		{name: "File with errors, include named returns",
+		{
+			name: "File with errors, include named returns",
 			args: args{
 				cliArgs: []string{"testdata/test.go"},
 				flags: Flags{

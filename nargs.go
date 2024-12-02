@@ -59,7 +59,7 @@ func CheckForUnusedFunctionArgs(args []string, flags Flags) (results []string, e
 			continue
 		}
 		ast.Walk(retVis, f)
-		for result, _ := range retVis.resultsSet {
+		for result := range retVis.resultsSet {
 			visitorResult = append(visitorResult, result)
 		}
 		// Due to our analysis, of the ast.File, we may end up getting our results out of order. Sort by line number to keep
@@ -91,7 +91,6 @@ func (a byLineNumber) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 // Visit implements the ast.Visitor Visit method.
 func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
-
 	var stmtList []ast.Stmt
 	var file *token.File
 	paramMap := make(map[string]bool)
@@ -129,8 +128,8 @@ func (v *unusedVisitor) Visit(node ast.Node) ast.Visitor {
 		if !used {
 			if file != nil {
 				if funcDecl != nil && funcDecl.Name != nil {
-					//TODO print parameter vs parameter(s)?
-					//TODO differentiation of used parameter vs. receiver?
+					// TODO print parameter vs parameter(s)?
+					// TODO differentiation of used parameter vs. receiver?
 					resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcDecl.Pos()).Line, funcDecl.Name.Name, paramName)
 					v.resultsSet[resStr] = struct{}{}
 					v.errsFound = true
@@ -159,7 +158,7 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 				}
 				funcName, ok := s.Lhs[index].(*ast.Ident)
 				if !ok {
-					//TODO - understand this case a little more
+					// TODO - understand this case a little more
 					// log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@2 wat")
 					continue
 				}
@@ -235,7 +234,7 @@ func (v *unusedVisitor) handleStmts(paramMap map[string]bool, stmtList []ast.Stm
 			stmtList = v.handleExprs(paramMap, []ast.Expr{s.X}, stmtList)
 
 		case nil, *ast.EmptyStmt:
-			//no-op
+			// no-op
 
 		default:
 			log.Printf("ERROR: unknown stmt type %T\n", s)
@@ -267,7 +266,7 @@ func handleIdent(paramMap map[string]bool, ident *ast.Ident) {
 		}*/
 	}
 
-	//TODO - ensure this truly isn't needed - can we rely on the
+	// TODO - ensure this truly isn't needed - can we rely on the
 	// ident object name?
 	// if _, ok := paramMap[ident.Name]; ok {
 	// 	paramMap[ident.Name] = true
@@ -282,8 +281,8 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			handleIdent(paramMap, e)
 
 		case *ast.BinaryExpr:
-			exprList = append(exprList, e.X) //TODO, do we need to then worry about x.left being used?
-			exprList = append(exprList, e.Y) //TODO, do we need to then worry about x.left being used?
+			exprList = append(exprList, e.X) // TODO, do we need to then worry about x.left being used?
+			exprList = append(exprList, e.Y) // TODO, do we need to then worry about x.left being used?
 
 		case *ast.CallExpr:
 			exprList = append(exprList, e.Args...)
@@ -343,7 +342,7 @@ func (v *unusedVisitor) handleExprs(paramMap map[string]bool, exprList []ast.Exp
 			exprList = append(exprList, e.Key, e.Value)
 
 		case *ast.StructType:
-			//TODO: no-op,  unless it contains funcs I guess? revisit this
+			// TODO: no-op,  unless it contains funcs I guess? revisit this
 			// exprList, stmtList = handleFieldList(paramMap, e.Fields, exprList, stmtList)
 
 		case *ast.Ellipsis:
@@ -384,7 +383,7 @@ func (v *unusedVisitor) handleDecls(paramMap map[string]bool, decls []ast.Decl, 
 			for _, spec := range d.Specs {
 				switch specType := spec.(type) {
 				case *ast.ValueSpec:
-					//TODO - I think the only specs we care about here are when we have a function declaration
+					// TODO - I think the only specs we care about here are when we have a function declaration
 					handleIdents(paramMap, specType.Names)
 					initialStmts = v.handleExprs(paramMap, []ast.Expr{specType.Type}, initialStmts)
 					initialStmts = v.handleExprs(paramMap, specType.Values, initialStmts)
@@ -441,7 +440,7 @@ func (v *unusedVisitor) handleFuncLit(paramMap map[string]bool, funcLit *ast.Fun
 
 		for paramName, used := range funcParamMap {
 			if !used && paramName != "_" {
-				//TODO: this append currently causes things to appear out of order (2)
+				// TODO: this append currently causes things to appear out of order (2)
 				file := v.fileSet.File(funcLit.Pos())
 				resStr := fmt.Sprintf("%v:%v %v contains unused parameter %v\n", file.Name(), file.Position(funcLit.Pos()).Line, funcName.Name, paramName)
 				v.resultsSet[resStr] = struct{}{}

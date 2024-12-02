@@ -15,8 +15,8 @@ func usage() {
 	log.Printf("Flags:\n")
 	flag.PrintDefaults()
 }
-func main() {
 
+func main() {
 	// Remove log timestamp
 	log.SetFlags(0)
 
