@@ -36,12 +36,9 @@ func parseInput(args []string, fset *token.FileSet, includeTests bool) ([]*ast.F
 	} else {
 		for _, arg := range args {
 			if strings.HasSuffix(arg, "/...") && isDir(arg[:len(arg)-len("/...")]) {
-
 				directoryList = append(directoryList, allPackagesInFS(arg)...)
-
 			} else if isDir(arg) {
 				directoryList = append(directoryList, arg)
-
 			} else if exists(arg) {
 				if strings.HasSuffix(arg, ".go") {
 					fileMode = true
