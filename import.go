@@ -323,6 +323,7 @@ func matchPackages(pattern string) []string {
 				if _, noGo := err.(*build.NoGoError); noGo {
 					return nil
 				}
+				fmt.Printf("ERROR: %v", err)
 			}
 			pkgs = append(pkgs, name)
 			return nil

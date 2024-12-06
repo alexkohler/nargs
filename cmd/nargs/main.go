@@ -42,7 +42,7 @@ func main() {
 	}
 
 	for _, result := range results {
-		log.Printf(result)
+		log.Print(result)
 	}
 
 	if exitWithCode {
