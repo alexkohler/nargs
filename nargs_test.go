@@ -86,7 +86,11 @@ func TestCheckForUnusedFunctionArgs(t *testing.T) {
 				t.Errorf("CheckForUnusedFunctionArgs()\ngot = %v,\nwant %v", gotResults, tt.wantResults)
 			}
 			if gotExitWithStatus != tt.wantExitWithStatus {
-				t.Errorf("CheckForUnusedFunctionArgs() gotExitWithStatus = %v, want %v", gotExitWithStatus, tt.wantExitWithStatus)
+				t.Errorf(
+					"CheckForUnusedFunctionArgs() gotExitWithStatus = %v, want %v",
+					gotExitWithStatus,
+					tt.wantExitWithStatus,
+				)
 			}
 		})
 	}
